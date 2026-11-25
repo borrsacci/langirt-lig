@@ -179,7 +179,7 @@ d('veritabanı kuralları', () => {
   });
 
   it('başlat: bahis kapanır, yetkisiz kişi maçı yönetemez', async () => {
-    await expectErr(as(U5, 'select start_match($1)', [M1]), /sadece kaydı başlatan/);
+    await expectErr(as(U5, 'select start_match($1)', [M1]), /sadece maçta oynayanlar/);
     await as(U3, 'select start_match($1)', [M1]); // oyunculardan biri başlatabilir
     await expectErr(as(U5, 'select place_bet($1, 10)', [(await sel(M1, 'ms', '1')).id]), /kapandı/);
     expect((await as(U2, 'select * from bets where user_id=$1', [U5])).length).toBe(6); // iptal edilen dahil
@@ -190,7 +190,7 @@ d('veritabanı kuralları', () => {
   it('canlı maç: goller, mevki değişimi, son top, devre, geri alma', async () => {
     const goal = (uid: string, player: string, rem?: number, ev = randomUUID()) =>
       as(uid, 'select (record_goal($1,$2,$3,$4)).*', [M1, ev, player, rem ?? null]).then((r) => r[0]);
-    await expectErr(goal(U5, P['Okan']), /sadece kaydı başlatan/);
+    await expectErr(goal(U5, P['Okan']), /sadece maçta oynayanlar/);
     await expectErr(goal(U2, P['Sefa']), /maçta değil/);
     await advanceClock(M1, 30_000);
     const ev1 = randomUUID();
@@ -246,7 +246,7 @@ d('veritabanı kuralları', () => {
     await as(U2, 'select undo_event($1,$2)', [M1, fin]);
     expect((await one('select status, last_ball from matches where id=$1', [M1]))).toEqual({ status: 'live', last_ball: true });
     await goal(U2, P['Okan'], 0, randomUUID());
-    await expectErr(as(U5, 'select submit_match($1)', [M1]), /sadece kaydı başlatan/);
+    await expectErr(as(U5, 'select submit_match($1)', [M1]), /sadece maçta oynayanlar/);
     await as(U2, 'select submit_match($1)', [M1]);
     expect((await one('select status from matches where id=$1', [M1])).status).toBe('pending');
     // onay beklerken istatistiklere girmez
@@ -362,6 +362,20 @@ d('veritabanı kuralları', () => {
   it('başkalarının kuponları maç başladıktan sonra görünür', async () => {
     const all = await as(U2, 'select user_id, status from bets');
     expect(all.some((b: any) => b.user_id === U5)).toBe(true);
+  });
+
+  it('maçta oynamayan kişi (kurayı çekse bile) maçı yönetemez', async () => {
+    // Sefa (U5) kurayı çekip bahsi açıyor ama maçta değil
+    const M6 = await createMatch(U5, { AF: P['Okan'], AK: P['Caner'], BF: P['Burak'], BK: P['Tolga'] });
+    await expectErr(as(U5, 'select start_match($1)', [M6]), /sadece/);
+    await expectErr(as(U5, 'select cancel_match($1)', [M6]), /yetkiniz yok/);
+    await as(U3, 'select start_match($1)', [M6]); // maçtaki oyuncu başlatır
+    await expectErr(as(U5, 'select (record_goal($1,$2,$3,null)).id', [M6, randomUUID(), P['Okan']]), /sadece/);
+    await expectErr(as(U5, 'select swap_roles($1,$2,$3)', [M6, randomUUID(), 'A']), /sadece/);
+    await expectErr(as(U5, 'select finish_early($1)', [M6]), /sadece/);
+    await as(U4, 'select (record_goal($1,$2,$3,null)).id', [M6, randomUUID(), P['Okan']]); // oyuncu girebilir
+    await as(A, 'select (record_goal($1,$2,$3,null)).id', [M6, randomUUID(), P['Burak']]); // admin girebilir
+    await as(A, 'select cancel_match($1)', [M6]);
   });
 
   it('sıralama tablosu', async () => {

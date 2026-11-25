@@ -24,7 +24,8 @@ export function MatchScreen() {
 
 function useCanControl(m: MatchRow) {
   const me = useStore((s) => s.me)!;
-  return me.is_admin || m.created_by === me.id || (!!me.player_id && [m.a_f, m.a_k, m.b_f, m.b_k].includes(me.player_id));
+  // sadece maçta oynayan 4 kişi ve admin (sunucudaki can_control ile aynı)
+  return me.is_admin || (!!me.player_id && [m.a_f, m.a_k, m.b_f, m.b_k].includes(me.player_id));
 }
 
 // =====================================================================
@@ -525,7 +526,7 @@ function LiveView({ match }: { match: MatchRow }) {
       {canControl ? (
         <ControlPad match={match} events={events} remaining={remaining} lastBall={lastBall} act={act} />
       ) : (
-        <p className="px-1 text-center text-sm text-dim">Skor canlı olarak güncelleniyor.</p>
+        <p className="px-1 text-center text-sm text-dim">Skor canlı olarak güncelleniyor. Skoru sadece maçta oynayanlar girebilir.</p>
       )}
       <Section title="Goller">
         <Card className="py-1">
@@ -737,7 +738,7 @@ function ReviewView({ match }: { match: MatchRow }) {
           )}
         </>
       ) : (
-        <p className="px-1 text-center text-sm text-chrome">Maçı kaydeden kişi skoru kontrol ediyor.</p>
+        <p className="px-1 text-center text-sm text-chrome">Maçta oynayanlar skoru kontrol ediyor.</p>
       )}
       <Section title="Goller">
         <Card className="py-1">
