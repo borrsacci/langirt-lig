@@ -6,9 +6,8 @@ Ofis langırt ligi: kura, canlı maç kaydı, istatistikler ve coin ile iddia. A
 
 - **Maç**: 4 oyuncu seçilir. Kura (veya elle dizme) ile Mavi ve Kırmızı takımlar, kaleci ve forvetler belirlenir. Kura, daha önce birlikte çok oynamış ikilileri daha az eşleştirir. Maç 3'er dakikalık iki yarıdır; süre bitince **son top** oynanır ve gelen gol yarıyı bitirir. Her takım maç başına bir kez mevki değiştirebilir.
 - **Onay**: Biten maç, kaydeden kişi tarafından onaya gönderilir. Admin onaylamadan maç istatistiklere girmez, kuponlar sonuçlanmaz. Admin gerekirse golleri düzeltir, maçı reddeder (bahisler iade edilir) veya "onayla, bahisleri iade et" der.
-- **Bahis**: Kadro kesinleşince ("Oranları çıkar, bahsi aç") oranlar sunucuda hesaplanır ve sabitlenir. "Maçı başlat" ile bahisler kapanır. Her yeni hesap admin onayıyla 1000 coin alır. En az bahis 2 coin. Maçta oynayanlar kendi maçlarına sadece kendi lehlerine bahis yapabilir.
+- **Bahis**: Kadro kesinleşince ("Oranları çıkar, bahsi aç") oranlar sunucuda hesaplanır ve sabitlenir. "Maçı başlat" ile bahisler kapanır. Her yeni hesap admin onayıyla 1000 coin alır. En az bahis 2 coin. Maçta oynayanlar kendi maçlarında sadece kendi lehlerine ve beraberliğe bahis yapabilir.
 - **Pazarlar**: Maç sonucu (1-X-2), çifte şans, ilk yarı sonucu, ikinci yarı sonucu, ilk yarı / maç sonucu (İY/MS), toplam gol alt/üst, ilk yarı alt/üst, karşılıklı gol, oyuncu gol atar, oyuncu gol sayısı alt/üst, ilk golü atan. Aynı maça istenen sayıda kupon yapılabilir.
-- **Kasa kesintisi**: Her kupondan yatırılan tutarın %5'i kasaya kesilir. 100 coin oynanırsa 95 coin bahse girer ve kazanç 95 × oran olur. Maç iptal edilir veya kupon maç başlamadan iptal edilirse tutarın tamamı iade edilir.
 - **Şeffaflık**: Maç başladıktan sonra herkesin kuponları **Kuponlar → Herkes** bölümünde görünür. **Sıralama**'da bir kişiye dokunulunca onun tüm kuponları ve net kâr/zararı açılır.
 
 ### Oranlar nasıl hesaplanır
@@ -66,7 +65,7 @@ Link, Actions çalışmasının özet sayfasında da yazar. Bu linki ofis grubun
 
 - **Ücretsiz plan**: Supabase ücretsiz projesi 7 gün hiç kullanılmazsa uykuya geçer. Uyanması için Supabase panelinden **Restore** demek yeterlidir; veriler kaybolmaz.
 - **Şifremi unuttum**: Admin, **Kullanıcılar** bölümünden kişiye yeni şifre verebilir.
-- **Coin tanımlama**: Admin, **Kullanıcılar** bölümünden herkese aynı anda coin verebilir veya tek bir hesaba coin ekleyip düşebilir. Admin panelinin üstünde toplam kesinti ve kasa kârı görünür. Her hareket hesabın "Hesap hareketleri" listesinde görünür.
+- **Coin tanımlama**: Admin, **Kullanıcılar** bölümünden herkese aynı anda coin verebilir veya tek bir hesaba coin ekleyip düşebilir. Admin panelinin üstünde kasa kârı görünür. Her hareket hesabın "Hesap hareketleri" listesinde görünür.
 - **APK imzası**: Güncellemelerin eski sürümün üstüne kurulabilmesi için tüm derlemeler `android/app/langirt.keystore` ile imzalanır. Bu dosya Play Store için değildir; sadece ofis içi dağıtım içindir.
 - **Admin**: Sadece ilk kayıt olan hesaptır. Admin yetkisini başka hesaba taşımak için Supabase SQL Editor'de şunu çalıştırın:
   `update profiles set is_admin = false; update profiles set is_admin = true where username = 'yeni_admin';`

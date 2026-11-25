@@ -155,14 +155,14 @@ d('veritabanı kuralları', () => {
     await as(A, 'select place_bet($1, 50)', [(await sel(M1, 'dc', '1X')).id]);
     await as(A, 'select place_bet($1, 10)', [(await sel(M1, `pg_${P['Caner']}`, 'Y')).id]);
     await expectErr(as(A, 'select place_bet($1, 10)', [msB.id]), /kendi lehinize/);
-    await expectErr(as(A, 'select place_bet($1, 10)', [msX.id]), /kendi lehinize/);
+    await as(A, 'select place_bet($1, 10)', [msX.id]); // beraberlik oyunculara açık
     await expectErr(as(A, 'select place_bet($1, 10)', [btts.id]), /kendi lehinize/);
     await expectErr(as(A, 'select place_bet($1, 10)', [(await sel(M1, `pg_${P['Okan']}`, 'N')).id]), /kendi lehinize/);
     await expectErr(as(U3, 'select place_bet($1, 10)', [msA.id]), /kendi lehinize/); // Burak B takımında
     // izleyici her şeye oynayabilir
     for (const s of [msA, msB, msX, btts]) await as(U5, 'select place_bet($1, 25)', [s.id]);
     await as(U5, 'select place_bet($1, 2)', [(await sel(M1, 'fg', P['Tolga'])).id]);
-    expect(await bal(A)).toBe(840);
+    expect(await bal(A)).toBe(830);
     expect(await bal(U5)).toBe(898);
     // kupon iptali: maç başlamadan
     const [{ place_bet: r }] = await as(U5, 'select place_bet($1, 40)', [msA.id]);
@@ -272,8 +272,7 @@ d('veritabanı kuralları', () => {
     for (const b of bets) {
       if (b.status === 'cancelled') continue;
       expect(b.status).toBe(b.result);
-      if (b.result === 'won') expected[b.user_id] += Math.round((Number(b.stake) - Number(b.commission)) * Number(b.odds) * 100) / 100;
-      expect(Number(b.commission)).toBeCloseTo(Math.round(Number(b.stake) * 5) / 100, 2);
+      if (b.result === 'won') expected[b.user_id] += Math.round(Number(b.stake) * Number(b.odds) * 100) / 100;
       if (b.result === 'void') expected[b.user_id] += Number(b.stake);
     }
     for (const u of Object.keys(expected)) expect(await bal(u)).toBeCloseTo(expected[u], 2);
@@ -327,18 +326,17 @@ d('veritabanı kuralları', () => {
     await as(A, 'select cancel_match($1)', [M4]);
   });
 
-  it('kasa kesintisi, kasa özeti ve herkese coin', async () => {
+  it('kasa özeti ve herkese coin', async () => {
     const M5 = await createMatch(A, { AF: P['Okan'], AK: P['Caner'], BF: P['Burak'], BK: P['Tolga'] });
     const s = await sel(M5, 'ms', '1');
     const b0 = await bal(U5);
     const [{ place_bet: r }] = await as(U5, 'select place_bet($1, 33.33)', [s.id]);
-    expect(Number(r.commission)).toBe(1.67);
     expect(await bal(U5)).toBeCloseTo(b0 - 33.33, 2);
     await as(U5, 'select cancel_bet($1)', [r.bet_id]); // iptalde tutarın tamamı iade
     expect(await bal(U5)).toBeCloseTo(b0, 2);
     await as(A, 'select cancel_match($1)', [M5]);
     const hs = (await as(A, 'select admin_house_stats() as h'))[0].h;
-    expect(Number(hs.commission)).toBeGreaterThan(0);
+    expect(Number(hs.bets)).toBeGreaterThan(0);
     await expectErr(as(U2, 'select admin_house_stats()'), /sadece admin/);
     await expectErr(as(U2, 'select admin_grant_all(10, null)'), /sadece admin/);
     const before = await bal(U2);

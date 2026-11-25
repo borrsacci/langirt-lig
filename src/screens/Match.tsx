@@ -6,7 +6,6 @@ import { deriveFacts, hasSwapped, lineupAfter, liveEvents } from '../../supabase
 import { settleRule } from '../../supabase/functions/_shared/settle.ts';
 import { HALF_MS, type Lineup, MIN_STAKE, type Team, initialLineup } from '../../supabase/functions/_shared/types.ts';
 import { invoke, rpc } from '../lib/api';
-import { COMMISSION, netStake } from '../../supabase/functions/_shared/types.ts';
 import { coin, odds as fmtOdds, payout, pct } from '../lib/format';
 import { keepAwake, onResume, thump, whistle } from '../lib/native';
 import { pairCounts } from '../lib/stats';
@@ -334,8 +333,8 @@ function ModelInfo({ match }: { match: MatchRow }) {
             </div>
           )}
           <p className="text-sm text-dim">
-            Verisi az olan oyuncular için model temkinli davranır ve oranlar dengeye yakın kalır. Oranlarda %7 kasa payı vardır ve
-            her kupondan ayrıca %5 kasa kesintisi alınır. %95'ten olası sonuçlar bahse kapalıdır.
+            Verisi az olan oyuncular için model temkinli davranır ve oranlar dengeye yakın kalır. Her oranda %7 kasa payı vardır;
+            %95'ten olası sonuçlar bahse kapalıdır.
           </p>
         </div>
       </Sheet>
@@ -359,7 +358,7 @@ function Bulletin({ match }: { match: MatchRow }) {
       {inMatch && (
         <p className="flex items-start gap-2 rounded-xl bg-felt px-3.5 py-3 text-sm text-chrome">
           <Lock size={16} className="mt-0.5 shrink-0" />
-          Bu maçta oynuyorsun: sadece kendi takımının lehine olan bahisler açık.
+          Bu maçta oynuyorsun: kendi takımının lehine olan bahisler ve beraberlik açık.
         </p>
       )}
       {groups.map(([g, test]) => (
@@ -454,19 +453,9 @@ function BetSlip({ slip, onClose }: { slip: { sel: Selection; title: string } | 
               <button onClick={() => setRaw(String(me.balance).replace('.', ','))} className="h-10 rounded-lg bg-felt-2 text-sm font-semibold active:bg-line">Tümü</button>
             </div>
           </div>
-          <div className="space-y-1.5 rounded-xl bg-pitch px-4 py-3 text-sm">
-            <div className="flex justify-between text-chrome">
-              <span>Kasa kesintisi (%{COMMISSION * 100})</span>
-              <span className="num">{valid ? `−${coin(Math.round((stake - netStake(stake)) * 100) / 100)}` : '—'}</span>
-            </div>
-            <div className="flex justify-between text-chrome">
-              <span>Bahse giren</span>
-              <span className="num">{valid ? coin(netStake(stake)) : '—'}</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-line/60 pt-2">
-              <span className="text-base text-chrome">Kazanırsan</span>
-              <Coin value={valid ? coin(payout(netStake(stake), sel.odds!)) : '—'} className="text-xl text-brass" />
-            </div>
+          <div className="flex items-center justify-between rounded-xl bg-pitch px-4 py-3">
+            <span className="text-chrome">Kazanırsan</span>
+            <Coin value={valid ? coin(payout(stake, sel.odds!)) : '—'} className="text-xl text-brass" />
           </div>
           <div className="text-sm text-dim">
             Bakiye {coin(me.balance)} · En az {MIN_STAKE} coin

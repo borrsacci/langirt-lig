@@ -339,12 +339,14 @@ export function priceMatch(
   const teamA = [lineup.AF, lineup.AK];
   const teamB = [lineup.BF, lineup.BK];
   const teamOf = (t: Team) => (t === 'A' ? teamA : teamB);
+  // beraberlik seçenekleri maçtaki 4 oyuncunun hepsine açık
+  const everyone = [...teamA, ...teamB];
 
   const markets: MarketDef[] = [];
   markets.push(
     market('ms', 'Maç Sonucu', [
       { code: '1', label: 'Mavi', rule: { k: 'ms', o: 'A' }, prob: pA, allowed: teamA },
-      { code: 'X', label: 'Beraberlik', rule: { k: 'ms', o: 'D' }, prob: pD, allowed: [] },
+      { code: 'X', label: 'Beraberlik', rule: { k: 'ms', o: 'D' }, prob: pD, allowed: everyone },
       { code: '2', label: 'Kırmızı', rule: { k: 'ms', o: 'B' }, prob: pB, allowed: teamB },
     ], o),
   );
@@ -365,7 +367,7 @@ export function priceMatch(
   markets.push(
     market('ht', 'İlk Yarı Sonucu', [
       { code: '1', label: 'Mavi', rule: { k: 'ht', o: 'A' }, prob: hA, allowed: teamA },
-      { code: 'X', label: 'Beraberlik', rule: { k: 'ht', o: 'D' }, prob: hD, allowed: [] },
+      { code: 'X', label: 'Beraberlik', rule: { k: 'ht', o: 'D' }, prob: hD, allowed: everyone },
       { code: '2', label: 'Kırmızı', rule: { k: 'ht', o: 'B' }, prob: hB, allowed: teamB },
     ], o),
   );
@@ -373,7 +375,7 @@ export function priceMatch(
   markets.push(
     market('h2', 'İkinci Yarı Sonucu', [
       { code: '1', label: 'Mavi', rule: { k: 'h2', o: 'A' }, prob: hA, allowed: teamA },
-      { code: 'X', label: 'Beraberlik', rule: { k: 'h2', o: 'D' }, prob: hD, allowed: [] },
+      { code: 'X', label: 'Beraberlik', rule: { k: 'h2', o: 'D' }, prob: hD, allowed: everyone },
       { code: '2', label: 'Kırmızı', rule: { k: 'h2', o: 'B' }, prob: hB, allowed: teamB },
     ], o),
   );
@@ -388,8 +390,8 @@ export function priceMatch(
         label: `${long[h]} / ${long[f]}`,
         rule: { k: 'htft', ht: h, ft: f },
         prob: htft[i][j],
-        // oynayan sadece takımının hem ilk yarıyı hem maçı aldığı seçeneğe oynayabilir
-        allowed: h === f && h !== 'D' ? teamOf(h) : [],
+        // oynayan: takımının hem ilk yarıyı hem maçı aldığı seçenek veya Ber./Ber.
+        allowed: h === f ? (h === 'D' ? everyone : teamOf(h)) : [],
       }),
     ),
   );

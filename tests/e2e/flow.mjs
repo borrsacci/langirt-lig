@@ -115,11 +115,11 @@ try {
   await okan.reload();
   await okan.getByText('Bahis açık').waitFor();
   const okanTeam = [m.a_f, m.a_k].includes(pid.Okan) ? 'A' : 'B';
-  await okan.getByText(/sadece kendi takımının lehine/).waitFor();
+  await okan.getByText(/kendi takımının lehine olan bahisler ve beraberlik/).waitFor();
   const msBtns = okan.getByText('Maç Sonucu').locator('..').getByRole('button');
   const lockedIdx = okanTeam === 'A' ? 2 : 0;
   if (!(await msBtns.nth(lockedIdx).isDisabled())) throw new Error('aleyhe bahis butonu kilitli değil');
-  if (!(await msBtns.nth(1).isDisabled())) throw new Error('beraberlik kilitli değil');
+  if (await msBtns.nth(1).isDisabled()) throw new Error('beraberlik oyuncuya kapalı');
   await msBtns.nth(okanTeam === 'A' ? 0 : 2).click();
   await okan.getByPlaceholder('Tutar').fill('100');
   await click(okan, 'Kuponu onayla');
@@ -224,11 +224,10 @@ try {
   const bal = (await db.query(`select p.display_name, p.balance, coalesce(sum(t.amount),0) s from profiles p left join transactions t on t.user_id=p.id group by p.id order by 1`)).rows;
   for (const r of bal) if (Number(r.balance) !== Number(r.s)) throw new Error('defter tutarsız ' + r.display_name);
   console.log('bakiyeler', bal.map((r) => `${r.display_name}=${r.balance}`).join(' '));
-  const bets = (await db.query(`select p.display_name, b.status, b.stake, b.commission, b.odds, b.payout from bets b join profiles p on p.id=b.user_id`)).rows;
+  const bets = (await db.query(`select p.display_name, b.status, b.stake, b.odds, b.payout from bets b join profiles p on p.id=b.user_id`)).rows;
   console.log('kuponlar', JSON.stringify(bets));
   for (const b of bets) {
-    if (Number(b.commission) !== Math.round(Number(b.stake) * 5) / 100) throw new Error('kesinti yanlış');
-    if (b.status === 'won' && Number(b.payout) !== Math.round((Number(b.stake) - Number(b.commission)) * Number(b.odds) * 100) / 100) throw new Error('ödeme yanlış');
+    if (b.status === 'won' && Number(b.payout) !== Math.round(Number(b.stake) * Number(b.odds) * 100) / 100) throw new Error('ödeme yanlış');
   }
   if (bets.filter((b) => b.display_name === 'Sefa').length !== 3) throw new Error('aynı maça çoklu kupon olmadı');
   const score = Object.fromEntries((await db.query(`select team, count(*)::int c from match_events where match_id=$1 and kind='goal' and deleted_at is null group by team`, [m.id])).rows.map((r) => [r.team, r.c]));

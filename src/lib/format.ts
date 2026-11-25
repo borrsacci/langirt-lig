@@ -32,8 +32,8 @@ export function when(iso: string): string {
 /** Kuruş hassasiyetinde güvenli çarpım (sunucuyla aynı yuvarlama) */
 export const payout = (stake: number, o: number) => Math.round(stake * o * 100) / 100;
 
-/** Kuponun kazanırsa ödeyeceği tutar: (yatırılan − kasa kesintisi) × oran */
-export const betWin = (b: { stake: number; commission: number; odds: number }) => payout(b.stake - b.commission, b.odds);
+/** Kuponun kazanırsa ödeyeceği tutar: yatırılan × oran */
+export const betWin = (b: { stake: number; odds: number }) => payout(b.stake, b.odds);
 
 /** Sonuçlanmış kuponun net etkisi (kesinti dahil) */
 export function betNet(b: { status: string; stake: number; payout: number }): number | null {

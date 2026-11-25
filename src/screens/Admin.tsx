@@ -47,8 +47,8 @@ function House() {
   return (
     <Card className="grid grid-cols-3 gap-2 text-center">
       <div>
-        <div className="font-display text-xl font-bold text-brass num">{coin(h.commission)}</div>
-        <div className="text-xs text-dim">Kesinti (%5)</div>
+        <div className="font-display text-xl font-bold text-brass num">{coin(h.open_stake)}</div>
+        <div className="text-xs text-dim">Açık kuponlar</div>
       </div>
       <div>
         <div className={cn('font-display text-xl font-bold num', profit >= 0 ? 'text-win' : 'text-loss')}>{coin(profit)}</div>

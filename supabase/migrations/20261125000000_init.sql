@@ -117,8 +117,6 @@ create table public.bets (
   match_id uuid not null references public.matches (id),
   selection_id uuid not null references public.selections (id),
   stake numeric(14, 2) not null check (stake >= 2),
-  -- kasa kesintisi (%5): bahse giren tutar = stake − commission
-  commission numeric(14, 2) not null default 0 check (commission >= 0 and commission < stake),
   odds numeric(6, 2) not null,
   status text not null default 'open' check (status in ('open', 'won', 'lost', 'void', 'cancelled')),
   payout numeric(14, 2) not null default 0,
@@ -704,7 +702,7 @@ begin
   for b in select * from bets where match_id = p_match and status = 'open' order by created_at for update loop
     select result into v_res from selections where id = b.selection_id;
     if v_res = 'won' then
-      v_pay := round((b.stake - b.commission) * b.odds, 2);
+      v_pay := round(b.stake * b.odds, 2);
       update bets set status = 'won', payout = v_pay, settled_at = now() where id = b.id;
       perform ledger(b.user_id, v_pay, 'payout', b.id, p_match, 'Kazanan kupon');
     elsif v_res = 'void' then
@@ -733,7 +731,7 @@ end $$;
 
 create or replace function public.place_bet(p_selection uuid, p_stake numeric)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare me profiles; s selections; m matches; v_bet uuid; nb numeric; v_comm numeric;
+declare me profiles; s selections; m matches; v_bet uuid; nb numeric;
 begin
   me := require_active();
   select * into s from selections where id = p_selection;
@@ -746,15 +744,14 @@ begin
   if p_stake <> round(p_stake, 2) then raise exception 'Tutar en fazla 2 ondalık olabilir' using errcode = 'P0001'; end if;
   if me.player_id is not null and me.player_id in (m.a_f, m.a_k, m.b_f, m.b_k)
      and not (me.player_id = any (s.allowed_players)) then
-    raise exception 'Kendi maçınızda sadece kendi lehinize bahis yapabilirsiniz' using errcode = 'P0001';
+    raise exception 'Kendi maçınızda sadece kendi lehinize veya beraberliğe bahis yapabilirsiniz' using errcode = 'P0001';
   end if;
   select * into me from profiles where id = me.id for update;
   if me.balance < p_stake then raise exception 'Yetersiz bakiye' using errcode = 'P0001'; end if;
-  v_comm := round(p_stake * 0.05, 2); -- kasa kesintisi %5
-  insert into bets (user_id, match_id, selection_id, stake, commission, odds)
-  values (me.id, m.id, s.id, p_stake, v_comm, s.odds) returning id into v_bet;
-  nb := ledger(me.id, -p_stake, 'bet', v_bet, m.id, 'Kupon (kasa kesintisi ' || v_comm::text || ')');
-  return jsonb_build_object('bet_id', v_bet, 'balance', nb, 'commission', v_comm);
+  insert into bets (user_id, match_id, selection_id, stake, odds)
+  values (me.id, m.id, s.id, p_stake, s.odds) returning id into v_bet;
+  nb := ledger(me.id, -p_stake, 'bet', v_bet, m.id, null);
+  return jsonb_build_object('bet_id', v_bet, 'balance', nb);
 end $$;
 
 create or replace function public.cancel_bet(p_bet uuid) returns numeric
@@ -795,7 +792,6 @@ declare r jsonb;
 begin
   perform require_admin();
   select jsonb_build_object(
-    'commission', coalesce(sum(commission) filter (where status in ('open', 'won', 'lost')), 0),
     'staked', coalesce(sum(stake) filter (where status in ('won', 'lost')), 0),
     'paid', coalesce(sum(payout) filter (where status = 'won'), 0),
     'open_stake', coalesce(sum(stake) filter (where status = 'open'), 0),

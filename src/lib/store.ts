@@ -37,7 +37,7 @@ const num = <T extends Record<string, any>>(o: T, keys: (keyof T)[]): T => {
   return c;
 };
 const fixBet = (b: any): Bet => {
-  const x = num(b, ['stake', 'odds', 'payout', 'commission']);
+  const x = num(b, ['stake', 'odds', 'payout']);
   if (x.selection) x.selection = num(x.selection, ['odds', 'prob']);
   return x;
 };
