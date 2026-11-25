@@ -1,0 +1,131 @@
+# main dalına her gönderimde: testler → Supabase (veritabanı + fonksiyonlar) → APK
+# Gerekli GitHub Secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  : supabase.com → Account → Access Tokens
+#   SUPABASE_PROJECT_REF   : proje adresindeki kimlik (https://<BU>.supabase.co)
+#   SUPABASE_DB_PASSWORD   : proje oluştururken belirlenen veritabanı şifresi
+# İsteğe bağlı (yoksa CLI ile otomatik alınır): SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+name: Yayınla
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Testler
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+        env:
+          PGTEST_HOST: localhost
+          PGTEST_PORT: 5432
+
+  backend:
+    name: Supabase
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Projeye bağlan
+        run: supabase link --project-ref "$REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Veritabanını güncelle
+        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+      - name: Sunucu fonksiyonlarını yükle
+        run: supabase functions deploy --project-ref "$REF"
+
+  android:
+    name: APK
+    needs: backend
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: API anahtarları
+        env:
+          ANON_SECRET: ${{ secrets.SUPABASE_ANON_KEY }}
+          SERVICE_SECRET: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$ANON_SECRET" ] || [ -z "$SERVICE_SECRET" ]; then
+            KEYS=$(supabase projects api-keys --project-ref "$REF" -o json)
+            ANON=$(echo "$KEYS" | jq -r '.[] | select(.name=="anon") | .api_key')
+            SERVICE=$(echo "$KEYS" | jq -r '.[] | select(.name=="service_role") | .api_key')
+          else
+            ANON="$ANON_SECRET"; SERVICE="$SERVICE_SECRET"
+          fi
+          if [ -z "$ANON" ] || [ "$ANON" = "null" ] || [ -z "$SERVICE" ] || [ "$SERVICE" = "null" ]; then
+            echo "::error::API anahtarları alınamadı. SUPABASE_ANON_KEY ve SUPABASE_SERVICE_ROLE_KEY secret'larını ekleyin."; exit 1
+          fi
+          echo "::add-mask::$ANON"; echo "::add-mask::$SERVICE"
+          echo "ANON=$ANON" >> "$GITHUB_ENV"; echo "SERVICE=$SERVICE" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Web uygulamasını derle
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
+          VITE_SUPABASE_ANON_KEY: ${{ env.ANON }}
+          APP_VERSION: ${{ github.run_number }}
+      - run: npx cap sync android
+      - name: APK derle
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../langirt-ligi.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: langirt-ligi-apk
+          path: langirt-ligi.apk
+      - name: APK'yı herkese açık linke yükle
+        run: |
+          BASE="https://$REF.supabase.co/storage/v1/object"
+          curl -fsS -X POST "$BASE/app/langirt-ligi.apk" \
+            -H "Authorization: Bearer $SERVICE" -H "apikey: $SERVICE" -H "x-upsert: true" \
+            -H "cache-control: max-age=60" -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @langirt-ligi.apk
+          printf '{"version": %s, "url": "%s/public/app/langirt-ligi.apk?v=%s"}' "${{ github.run_number }}" "$BASE" "${{ github.run_number }}" > version.json
+          curl -fsS -X POST "$BASE/app/version.json" \
+            -H "Authorization: Bearer $SERVICE" -H "apikey: $SERVICE" -H "x-upsert: true" \
+            -H "cache-control: max-age=30" -H "Content-Type: application/json" \
+            --data-binary @version.json
+          echo "### İndirme linki" >> "$GITHUB_STEP_SUMMARY"
+          echo "$BASE/public/app/langirt-ligi.apk" >> "$GITHUB_STEP_SUMMARY"
