@@ -96,6 +96,7 @@ export type BetRule =
   | { k: 'htft'; ht: Outcome; ft: Outcome } // ilk yarı / maç sonucu
   | { k: 'htou'; line: number; side: 'over' | 'under' } // ilk yarı toplam gol alt/üst
   | { k: 'ou'; line: number; side: 'over' | 'under' } // toplam gol alt/üst
+  | { k: 'tg'; team: Team; line: number; side: 'over' | 'under' } // takımın attığı gol alt/üst
   | { k: 'btts'; yes: boolean } // karşılıklı gol
   | { k: 'pg'; player: string; yes: boolean } // oyuncu gol atar
   | { k: 'pgl'; player: string; line: number; side: 'over' | 'under' } // oyuncu gol sayısı alt/üst

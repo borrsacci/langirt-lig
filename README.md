@@ -6,8 +6,9 @@ Ofis langırt ligi: kura, canlı maç kaydı, istatistikler ve coin ile iddia. A
 
 - **Maç**: 4 oyuncu seçilir. Kura (veya elle dizme) ile Mavi ve Kırmızı takımlar, kaleci ve forvetler belirlenir. Kura, daha önce birlikte çok oynamış ikilileri daha az eşleştirir. Maç 3'er dakikalık iki yarıdır; süre bitince **son top** oynanır ve gelen gol yarıyı bitirir. Her takım maç başına bir kez mevki değiştirebilir.
 - **Onay**: Biten maç, kaydeden kişi tarafından onaya gönderilir. Admin onaylamadan maç istatistiklere girmez, kuponlar sonuçlanmaz. Admin gerekirse golleri düzeltir, maçı reddeder (bahisler iade edilir) veya "onayla, bahisleri iade et" der.
-- **Bahis**: Kadro kesinleşince ("Oranları çıkar, bahsi aç") oranlar sunucuda hesaplanır ve sabitlenir. "Maçı başlat" ile bahisler kapanır. Her yeni hesap admin onayıyla 1000 coin alır. En az bahis 2 coin. Maçta oynayanlar kendi maçlarında sadece kendi lehlerine ve beraberliğe bahis yapabilir.
-- **Pazarlar**: Maç sonucu (1-X-2), çifte şans, ilk yarı sonucu, ikinci yarı sonucu, ilk yarı / maç sonucu (İY/MS), toplam gol alt/üst, ilk yarı alt/üst, karşılıklı gol, oyuncu gol atar, oyuncu gol sayısı alt/üst, ilk golü atan. Aynı maça istenen sayıda kupon yapılabilir.
+- **Bahis**: Kadro kesinleşince ("Oranları çıkar, bahsi aç") oranlar sunucuda hesaplanır ve sabitlenir. "Maçı başlat" ile bahisler kapanır. Her yeni hesap admin onayıyla 1000 coin alır. En az bahis 2 coin. Maçta oynayanlar kendi maçlarında sadece kendi lehlerine, beraberliğe ve rakibin golüne (rakip oyuncu veya rakip takım) alt bahis yapabilir; rakibe üst oynanamaz.
+- **Pazarlar**: Maç sonucu (1-X-2), çifte şans, ilk yarı sonucu, ikinci yarı sonucu, ilk yarı / maç sonucu (İY/MS), toplam gol alt/üst, takım gol sayısı alt/üst, ilk yarı alt/üst, karşılıklı gol, oyuncu gol atar, oyuncu gol sayısı alt/üst, ilk golü atan. Aynı maça istenen sayıda kupon yapılabilir.
+- **Maç ödülü**: Onaylanan her maçta oynayan 4 kişiye 10 coin verilir. Beraberlikte herkese 15 coin daha, galibiyette kazanan iki oyuncuya 20 coin daha (toplam 30). Reddedilen veya iptal edilen maçta ödül verilmez.
 - **Şeffaflık**: Maç başladıktan sonra herkesin kuponları **Kuponlar → Herkes** bölümünde görünür. **Sıralama**'da bir kişiye dokunulunca onun tüm kuponları ve net kâr/zararı açılır.
 
 ### Oranlar nasıl hesaplanır

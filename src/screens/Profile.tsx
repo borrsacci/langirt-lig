@@ -14,6 +14,7 @@ const KIND: Record<Transaction['kind'], string> = {
   payout: 'Kazanç',
   refund: 'İade',
   admin: 'Admin',
+  reward: 'Maç ödülü',
 };
 
 export function ProfileScreen() {

@@ -426,6 +426,26 @@ export function priceMatch(
     );
   }
 
+  // Takım golleri alt/üst. Oynayanlar: kendi takımına üst, rakip takıma sadece alt.
+  for (const t of ['A', 'B'] as const) {
+    const dist: number[] = [];
+    full.forEach((row, a) => row.forEach((q, b) => {
+      const g = t === 'A' ? a : b;
+      dist[g] = (dist[g] ?? 0) + q;
+    }));
+    const L = mainLine(dist);
+    const p = overProb(dist, L);
+    const lbl = L.toFixed(1).replace('.', ',');
+    const tn = t === 'A' ? 'Mavi' : 'Kırmızı';
+    const opp = t === 'A' ? teamB : teamA;
+    markets.push(
+      market(`tg_${t}`, `${tn} Gol Sayısı ${lbl} Alt/Üst`, [
+        { code: 'U', label: `${tn} ${lbl} Alt`, rule: { k: 'tg', team: t, line: L, side: 'under' }, prob: 1 - p, allowed: opp },
+        { code: 'O', label: `${tn} ${lbl} Üst`, rule: { k: 'tg', team: t, line: L, side: 'over' }, prob: p, allowed: teamOf(t) },
+      ], o),
+    );
+  }
+
   markets.push(
     market('btts', 'Karşılıklı Gol', [
       { code: 'Y', label: 'Var', rule: { k: 'btts', yes: true }, prob: pBtts, allowed: [] },
@@ -451,7 +471,8 @@ export function priceMatch(
     const po = overProb(pGoals[s], gl);
     markets.push(
       market(`pgl_${pid}`, `${name} Gol Sayısı ${glTxt} Alt/Üst`, [
-        { code: 'U', label: `${glTxt} Alt`, rule: { k: 'pgl', player: pid, line: gl, side: 'under' }, prob: 1 - po, allowed: [] },
+        // rakip oyuncunun golüne sadece alt oynanabilir
+        { code: 'U', label: `${glTxt} Alt`, rule: { k: 'pgl', player: pid, line: gl, side: 'under' }, prob: 1 - po, allowed: teamOf(team === 'A' ? 'B' : 'A') },
         { code: 'O', label: `${glTxt} Üst`, rule: { k: 'pgl', player: pid, line: gl, side: 'over' }, prob: po, allowed: teamOf(team) },
       ], o),
     );

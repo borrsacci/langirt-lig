@@ -2,7 +2,7 @@
 // tüm para, yetki ve maç akışı kurallarını uçtan uca dener.
 // Çalıştırmak için: PGTEST_HOST=/tmp PGTEST_PORT=55432 npm test
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { deriveFacts } from '../supabase/functions/_shared/game.ts';
@@ -88,7 +88,7 @@ d('veritabanı kuralları', () => {
     await admin.end();
     admin = await connect(dbName);
     await admin.query(readFileSync('tests/db/supabase_stub.sql', 'utf8'));
-    await admin.query(readFileSync('supabase/migrations/20261125000000_init.sql', 'utf8'));
+    for (const f of readdirSync('supabase/migrations').sort()) await admin.query(readFileSync(`supabase/migrations/${f}`, 'utf8'));
   });
   afterAll(async () => {
     await admin?.end();
@@ -154,6 +154,11 @@ d('veritabanı kuralları', () => {
     await as(A, 'select place_bet($1, 100)', [msA.id]);
     await as(A, 'select place_bet($1, 50)', [(await sel(M1, 'dc', '1X')).id]);
     await as(A, 'select place_bet($1, 10)', [(await sel(M1, `pg_${P['Caner']}`, 'Y')).id]);
+    await as(A, 'select place_bet($1, 5)', [(await sel(M1, 'tg_B', 'U')).id]); // rakip takımın golüne alt
+    await as(A, 'select place_bet($1, 5)', [(await sel(M1, `pgl_${P['Burak']}`, 'U')).id]); // rakip oyuncunun golüne alt
+    await expectErr(as(A, 'select place_bet($1, 5)', [(await sel(M1, 'tg_B', 'O')).id]), /kendi lehinize/); // rakibe üst yok
+    await expectErr(as(A, 'select place_bet($1, 5)', [(await sel(M1, `pgl_${P['Burak']}`, 'O')).id]), /kendi lehinize/);
+    await expectErr(as(A, 'select place_bet($1, 5)', [(await sel(M1, 'tg_A', 'U')).id]), /kendi lehinize/); // kendi takımına alt yok
     await expectErr(as(A, 'select place_bet($1, 10)', [msB.id]), /kendi lehinize/);
     await as(A, 'select place_bet($1, 10)', [msX.id]); // beraberlik oyunculara açık
     await expectErr(as(A, 'select place_bet($1, 10)', [btts.id]), /kendi lehinize/);
@@ -162,7 +167,7 @@ d('veritabanı kuralları', () => {
     // izleyici her şeye oynayabilir
     for (const s of [msA, msB, msX, btts]) await as(U5, 'select place_bet($1, 25)', [s.id]);
     await as(U5, 'select place_bet($1, 2)', [(await sel(M1, 'fg', P['Tolga'])).id]);
-    expect(await bal(A)).toBe(830);
+    expect(await bal(A)).toBe(820);
     expect(await bal(U5)).toBe(898);
     // kupon iptali: maç başlamadan
     const [{ place_bet: r }] = await as(U5, 'select place_bet($1, 40)', [msA.id]);
@@ -275,7 +280,14 @@ d('veritabanı kuralları', () => {
       if (b.result === 'won') expected[b.user_id] += Math.round(Number(b.stake) * Number(b.odds) * 100) / 100;
       if (b.result === 'void') expected[b.user_id] += Number(b.stake);
     }
+    // maç ödülleri: Mavi (Okan, Caner) 4-2 kazandı → 30'ar; Kırmızı (Burak, Tolga) → 10'ar; izleyici 0
+    expected[A] += 30;
+    expected[U2] += 30;
+    expected[U3] += 10;
+    expected[U4] += 10;
     for (const u of Object.keys(expected)) expect(await bal(u)).toBeCloseTo(expected[u], 2);
+    const rw = await admin.query(`select count(*)::int c, sum(amount)::float s from transactions where kind='reward' and match_id=$1`, [M1]);
+    expect(rw.rows[0]).toEqual({ c: 4, s: 80 });
     // istatistiğe girdi
     const h = (await as(U2, 'select approved_history() as h'))[0].h;
     expect(h).toHaveLength(1);
@@ -307,6 +319,7 @@ d('veritabanı kuralları', () => {
     await as(U2, 'select submit_match($1)', [M3]);
     await as(A, 'select reject_match($1, $2)', [M3, 'yanlış kayıt']);
     expect(await bal(U5)).toBeCloseTo(b0, 2);
+    expect((await admin.query(`select count(*)::int c from transactions where kind='reward' and match_id=$1`, [M3])).rows[0].c).toBe(0); // reddedilen maça ödül yok
     expect((await one(`select count(*) from bets where match_id=$1 and status='void'`, [M3])).count).toBe('1');
   });
 

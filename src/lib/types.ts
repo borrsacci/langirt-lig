@@ -85,7 +85,7 @@ export interface Transaction {
   id: number;
   amount: number;
   balance_after: number;
-  kind: 'signup' | 'bet' | 'payout' | 'refund' | 'admin';
+  kind: 'signup' | 'bet' | 'payout' | 'refund' | 'admin' | 'reward';
   note: string | null;
   created_at: string;
   match_id: string | null;

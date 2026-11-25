@@ -350,7 +350,7 @@ function Bulletin({ match }: { match: MatchRow }) {
   if (!markets.length) return <Empty title="Oranlar yükleniyor" />;
   const groups: [string, (code: string) => boolean][] = [
     ['Maç', (c) => ['ms', 'dc', 'ht', 'h2', 'htft'].includes(c)],
-    ['Goller', (c) => c.startsWith('ou_') || c.startsWith('htou_') || c === 'btts'],
+    ['Goller', (c) => c.startsWith('ou_') || c.startsWith('htou_') || c.startsWith('tg_') || c === 'btts'],
     ['Oyuncular', (c) => c.startsWith('pg_') || c.startsWith('pgl_') || c === 'fg'],
   ];
   return (
@@ -358,7 +358,7 @@ function Bulletin({ match }: { match: MatchRow }) {
       {inMatch && (
         <p className="flex items-start gap-2 rounded-xl bg-felt px-3.5 py-3 text-sm text-chrome">
           <Lock size={16} className="mt-0.5 shrink-0" />
-          Bu maçta oynuyorsun: kendi takımının lehine olan bahisler ve beraberlik açık.
+          Bu maçta oynuyorsun: kendi takımının lehine olan bahisler, beraberlik ve rakibin golüne alt açık.
         </p>
       )}
       {groups.map(([g, test]) => (

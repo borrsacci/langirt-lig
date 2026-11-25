@@ -73,7 +73,14 @@ describe('fiyatlama analitik dağılımı gerçek oyunla birebir uyuşur', () =>
       if (s.rule.k === 'fg') continue; // golsüz maç yok, zaten yukarıda kontrol edildi
       expect(Math.abs((hits.get(s.label + JSON.stringify(s.rule)) ?? 0) / N - s.prob), `${s.label}`).toBeLessThan(tol);
     }
-    for (const code of ['htft', 'h2']) expect(pr.markets.some((m) => m.code === code)).toBe(true);
+    for (const code of ['htft', 'h2', 'tg_A', 'tg_B']) expect(pr.markets.some((m) => m.code === code)).toBe(true);
+    // oynayanlar: rakibin golüne sadece alt
+    const tgA = pr.markets.find((m) => m.code === 'tg_A')!;
+    expect(tgA.selections.find((s) => s.code === 'U')!.allowed.sort()).toEqual([lineup.BF, lineup.BK].sort());
+    expect(tgA.selections.find((s) => s.code === 'O')!.allowed.sort()).toEqual([lineup.AF, lineup.AK].sort());
+    const pglB = pr.markets.find((m) => m.code === `pgl_${lineup.BF}`)!;
+    expect(pglB.selections.find((s) => s.code === 'U')!.allowed.sort()).toEqual([lineup.AF, lineup.AK].sort());
+    expect(pglB.selections.find((s) => s.code === 'O')!.allowed.sort()).toEqual([lineup.BF, lineup.BK].sort());
     expect(pr.markets.some((m) => m.code.startsWith('htou_'))).toBe(true);
     // iyi forvet + iyi kaleci karşı karşıya; ikisi de favori sayılmamalı ama dengesiz de değil
     expect(pr.probs.A + pr.probs.D + pr.probs.B).toBeCloseTo(1, 9);
@@ -252,6 +259,8 @@ describe('bahis sonuçlandırma', () => {
     expect(settleRule({ k: 'htft', ht: 'A', ft: 'A' }, f)).toBe('lost');
     expect(settleRule({ k: 'htou', line: 2.5, side: 'over' }, f)).toBe('won');
     expect(settleRule({ k: 'htou', line: 2.5, side: 'under' }, f)).toBe('lost');
+    expect(settleRule({ k: 'tg', team: 'A', line: 3.5, side: 'under' }, f)).toBe('won');
+    expect(settleRule({ k: 'tg', team: 'B', line: 2.5, side: 'over' }, f)).toBe('won');
     expect(settleRule({ k: 'fg', player: 'p1' }, { ...f, firstScorer: null })).toBe('void');
   });
 });

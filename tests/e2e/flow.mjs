@@ -115,7 +115,7 @@ try {
   await okan.reload();
   await okan.getByText('Bahis açık').waitFor();
   const okanTeam = [m.a_f, m.a_k].includes(pid.Okan) ? 'A' : 'B';
-  await okan.getByText(/kendi takımının lehine olan bahisler ve beraberlik/).waitFor();
+  await okan.getByText(/kendi takımının lehine olan bahisler, beraberlik ve rakibin golüne alt/).waitFor();
   const msBtns = okan.getByText('Maç Sonucu').locator('..').getByRole('button');
   const lockedIdx = okanTeam === 'A' ? 2 : 0;
   if (!(await msBtns.nth(lockedIdx).isDisabled())) throw new Error('aleyhe bahis butonu kilitli değil');

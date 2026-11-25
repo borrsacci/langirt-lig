@@ -28,6 +28,10 @@ export function settleRule(rule: BetRule, f: MatchFacts): BetResult {
       const t = f.goalsA + f.goalsB;
       return won(rule.side === 'over' ? t > rule.line : t < rule.line);
     }
+    case 'tg': {
+      const g = rule.team === 'A' ? f.goalsA : f.goalsB;
+      return won(rule.side === 'over' ? g > rule.line : g < rule.line);
+    }
     case 'btts':
       return won((f.goalsA > 0 && f.goalsB > 0) === rule.yes);
     case 'pg':
@@ -59,6 +63,8 @@ export function ruleText(rule: BetRule, name: (id: string) => string): string {
       return `İY ${rule.line.toFixed(1).replace('.', ',')} ${rule.side === 'over' ? 'Üst' : 'Alt'}`;
     case 'ou':
       return `${rule.line.toFixed(1).replace('.', ',')} ${rule.side === 'over' ? 'Üst' : 'Alt'}`;
+    case 'tg':
+      return `${o(rule.team)} ${rule.line.toFixed(1).replace('.', ',')} gol ${rule.side === 'over' ? 'üst' : 'alt'}`;
     case 'btts':
       return `KG ${rule.yes ? 'Var' : 'Yok'}`;
     case 'pg':
