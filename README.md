@@ -55,6 +55,17 @@ https://PROJE_KIMLIGI.supabase.co/storage/v1/object/public/app/langirt-ligi.apk
 
 Link, Actions çalışmasının özet sayfasında da yazar. Bu linki ofis grubuna atmanız yeterli. Sonraki sürümlerde uygulama "Yeni sürüm hazır" diye kendisi haber verir.
 
+### iPhone (web sürümü)
+
+iPhone'a APK kurulamaz. Aynı uygulama web sürümü olarak Cloudflare Pages'te ücretsiz yayınlanır.
+
+1. [Cloudflare](https://dash.cloudflare.com/sign-up)'de ücretsiz hesap açın.
+2. Account ID'yi alın: panel adresindeki 32 karakterlik kod.
+3. **My Profile → API Tokens → Create Custom Token** ile bir anahtar oluşturun. Yetki olarak **Account → Cloudflare Pages → Edit** verin.
+4. GitHub secret olarak `CLOUDFLARE_ACCOUNT_ID` ve `CLOUDFLARE_API_TOKEN` ekleyin.
+
+Sonraki yayında adres `https://langirt-lig.pages.dev` olur. iPhone'da bu adres **Safari**'de açılır, sonra **Paylaş → Ana Ekrana Ekle** seçilir. Uygulama ikonuyla tam ekran açılır. Hesaplar ve veriler Android ile ortaktır, güncellemeler kendiliğinden gelir.
+
 ### 3. İlk açılış
 
 1. **Önce siz** uygulamayı kurup **Hesap aç** ile kayıt olun. İlk açılan hesap otomatik olarak **admin** olur ve 1000 coin alır.
