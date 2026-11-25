@@ -204,7 +204,10 @@ jobs:
       - name: Cloudflare Pages'e yayınla
         if: steps.check.outputs.ok == 'true'
         run: |
-          npx --yes wrangler@4 pages project create langirt-lig --production-branch main 2>/dev/null || true
+          set -o pipefail
+          if ! npx --yes wrangler@4 pages project list 2>&1 | grep -q "langirt-lig"; then
+            npx --yes wrangler@4 pages project create langirt-lig --production-branch main
+          fi
           npx --yes wrangler@4 pages deploy dist --project-name langirt-lig --branch main --commit-dirty=true | tee deploy.log
           echo "### iPhone / web adresi" >> "$GITHUB_STEP_SUMMARY"
           echo "Kalıcı adres: https://langirt-lig.pages.dev (proje adı alınmışsa Cloudflare panelindeki adres)" >> "$GITHUB_STEP_SUMMARY"
