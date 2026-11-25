@@ -11,7 +11,7 @@ import { RanksScreen } from './screens/Ranks';
 import { StatsScreen } from './screens/Stats';
 import { Coin, ConfirmHost, Spinner, Toasts, cn } from './ui/kit';
 import { coin } from './lib/format';
-import { checkUpdate, type UpdateInfo } from './lib/update';
+import { checkUpdate, dismissUpdate, type UpdateInfo } from './lib/update';
 
 type Tab = 'match' | 'coupons' | 'stats' | 'ranks' | 'profile';
 
@@ -117,9 +117,20 @@ function Shell() {
           </button>
         </div>
         {update && (
-          <a href={update.url} className="block bg-brass px-4 py-2 text-center text-sm font-semibold text-pitch">
-            Yeni sürüm hazır. Dokunup indirin ve kurun.
-          </a>
+          <div className="flex items-center bg-brass text-sm font-semibold text-pitch">
+            <a href={update.url} className="flex-1 px-4 py-2.5">
+              Yeni sürüm hazır. Dokunup indirin ve kurun.
+            </a>
+            <button
+              onClick={() => {
+                dismissUpdate(update.version);
+                setUpdate(null);
+              }}
+              className="px-4 py-2.5 text-pitch/70"
+            >
+              Sonra
+            </button>
+          </div>
         )}
         {!online && (
           <div className="bg-loss/15 px-4 py-1.5 text-center text-xs font-medium text-loss">Bağlantı koptu, yeniden bağlanıyor…</div>

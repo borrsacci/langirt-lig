@@ -86,6 +86,8 @@ jobs:
       REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 100 # yeni sürüm kontrolü için uygulama kodunun son değişikliği gerekir
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -138,11 +140,18 @@ jobs:
         if: needs.backend.outputs.configured == 'true'
         run: |
           BASE="https://$REF.supabase.co/storage/v1/object"
+          # Sadece uygulamanın kendisi değiştiyse yeni sürüm yayınla (CI/test değişiklikleri telefonlara "yeni sürüm" demesin)
+          APP_COMMIT=$(git log -1 --format=%H -- src public index.html android supabase/functions/_shared package.json package-lock.json capacitor.config.ts vite.config.ts)
+          PUBLISHED=$(curl -fsS "$BASE/public/app/version.json?t=$(date +%s)" | jq -r '.commit // empty' || true)
+          if [ "$APP_COMMIT" = "$PUBLISHED" ]; then
+            echo "Uygulama kodu değişmedi ($APP_COMMIT); yeni sürüm yayınlanmadı." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           curl -fsS -X POST "$BASE/app/langirt-ligi.apk" \
             -H "Authorization: Bearer $SERVICE" -H "apikey: $SERVICE" -H "x-upsert: true" \
             -H "cache-control: max-age=60" -H "Content-Type: application/vnd.android.package-archive" \
             --data-binary @langirt-ligi.apk
-          printf '{"version": %s, "url": "%s/public/app/langirt-ligi.apk?v=%s"}' "${{ github.run_number }}" "$BASE" "${{ github.run_number }}" > version.json
+          printf '{"version": %s, "url": "%s/public/app/langirt-ligi.apk?v=%s", "commit": "%s"}' "${{ github.run_number }}" "$BASE" "${{ github.run_number }}" "$APP_COMMIT" > version.json
           curl -fsS -X POST "$BASE/app/version.json" \
             -H "Authorization: Bearer $SERVICE" -H "apikey: $SERVICE" -H "x-upsert: true" \
             -H "cache-control: max-age=30" -H "Content-Type: application/json" \
