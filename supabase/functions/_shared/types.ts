@@ -9,6 +9,13 @@ export type Team = 'A' | 'B';
 export const HALF_MS = 180_000;
 export const MIN_STAKE = 2;
 export const START_BALANCE = 1000;
+/** Her kupondan kasaya kesilen pay (yatırılan tutarın %5'i) */
+export const COMMISSION = 0.05;
+
+/** Kesinti sonrası bahse giren tutar (sunucuyla aynı yuvarlama) */
+export function netStake(stake: number): number {
+  return Math.round((stake - Math.round(stake * COMMISSION * 100) / 100) * 100) / 100;
+}
 
 export interface Lineup {
   AF: string;
@@ -91,6 +98,9 @@ export type BetRule =
   | { k: 'ms'; o: Outcome } // maç sonucu
   | { k: 'dc'; o: [Outcome, Outcome] } // çifte şans
   | { k: 'ht'; o: Outcome } // ilk yarı sonucu
+  | { k: 'h2'; o: Outcome } // ikinci yarı sonucu (sadece 2. yarıdaki goller)
+  | { k: 'htft'; ht: Outcome; ft: Outcome } // ilk yarı / maç sonucu
+  | { k: 'htou'; line: number; side: 'over' | 'under' } // ilk yarı toplam gol alt/üst
   | { k: 'ou'; line: number; side: 'over' | 'under' } // toplam gol alt/üst
   | { k: 'btts'; yes: boolean } // karşılıklı gol
   | { k: 'pg'; player: string; yes: boolean } // oyuncu gol atar

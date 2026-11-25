@@ -1,5 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { invoke, rpc } from '../lib/api';
 import { coin, when } from '../lib/format';
 import { useStore, usePlayerName } from '../lib/store';
@@ -27,10 +27,38 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
           ['players', 'Oyuncular'],
         ]}
       />
+      <House />
       {tab === 'matches' && <MatchQueue />}
       {tab === 'users' && <Users />}
       {tab === 'players' && <Players />}
     </div>
+  );
+}
+
+function House() {
+  const [h, setH] = useState<Record<string, number> | null>(null);
+  const balance = useStore((s) => s.me?.balance);
+  const queue = useStore((s) => s.queue.length);
+  useEffect(() => {
+    rpc<Record<string, number>>('admin_house_stats').then(setH).catch(() => {});
+  }, [balance, queue]);
+  if (!h) return null;
+  const profit = Number(h.staked) - Number(h.paid);
+  return (
+    <Card className="grid grid-cols-3 gap-2 text-center">
+      <div>
+        <div className="font-display text-xl font-bold text-brass num">{coin(h.commission)}</div>
+        <div className="text-xs text-dim">Kesinti (%5)</div>
+      </div>
+      <div>
+        <div className={cn('font-display text-xl font-bold num', profit >= 0 ? 'text-win' : 'text-loss')}>{coin(profit)}</div>
+        <div className="text-xs text-dim">Kasa kârı</div>
+      </div>
+      <div>
+        <div className="font-display text-xl font-bold num">{coin(h.coins_in_play)}</div>
+        <div className="text-xs text-dim">Oyuncu coinleri</div>
+      </div>
+    </Card>
   );
 }
 
@@ -73,6 +101,7 @@ function Users() {
 
   return (
     <div className="space-y-5">
+      <GrantAll />
       {pending.length > 0 && (
         <Section title="Onay bekleyenler">
           {pending.map((p) => (
@@ -98,6 +127,39 @@ function Users() {
       </Section>
       <UserSheet p={sel} onClose={() => setSel(null)} free={players.filter((x) => !linked.has(x.id))} />
     </div>
+  );
+}
+
+function GrantAll() {
+  const refresh = useStore((s) => s.refresh);
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const amt = Number(amount.replace(',', '.'));
+  return (
+    <Section title="Herkese coin ver">
+      <Card className="space-y-2">
+        <p className="text-sm text-dim">Tek bir hesaba coin eklemek veya düşmek için aşağıdan kişiye dokunun.</p>
+        <div className="grid grid-cols-[1fr_1.4fr] gap-2">
+          <input className={inputCls} inputMode="decimal" placeholder="Tutar" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,]/g, ''))} />
+          <input className={inputCls} placeholder="Açıklama (ör. Ay sonu)" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+        <Button
+          className="w-full"
+          variant="brass"
+          disabled={!(amt > 0)}
+          onClick={async () => {
+            if (!(await confirm(`Herkese ${coin(amt)} coin verilsin mi?`, 'Tüm aktif hesaplara eklenir.', 'Ver'))) return;
+            const n = await rpc<number>('admin_grant_all', { p_amount: amt, p_note: note });
+            setAmount('');
+            setNote('');
+            await refresh('profiles', 'leaderboard', 'me');
+            toast(`${n} hesaba ${coin(amt)} coin eklendi`);
+          }}
+        >
+          Herkese ver
+        </Button>
+      </Card>
+    </Section>
   );
 }
 

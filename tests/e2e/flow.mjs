@@ -97,6 +97,12 @@ try {
   await shot(sefa, 'kupon');
   await click(sefa, 'Kuponu onayla');
   await toastSeen(sefa, /Kupon alındı/);
+  // aynı maça ikinci kupon: İY/MS
+  await sefa.getByText('İlk Yarı / Maç Sonucu').locator('..').getByRole('button').first().click();
+  await sefa.getByPlaceholder('Tutar').fill('10');
+  await shot(sefa, 'kupon-iyms');
+  await click(sefa, 'Kuponu onayla');
+  await toastSeen(sefa, /Kupon alındı/);
   // geçersiz tutar
   await sefa.getByText(/Toplam Gol .* Alt\/Üst/).nth(1).locator('..').getByRole('button').last().click();
   await sefa.getByPlaceholder('Tutar').fill('1');
@@ -173,6 +179,14 @@ try {
   await okan.getByRole('button', { name: 'Onayla', exact: true }).click();
   await confirmSheet(okan, 'Onayla');
   await toastSeen(okan, /Maç onaylandı/);
+  await wait(500);
+  await shot(okan, 'admin-kasa');
+  // herkese coin
+  await okan.getByRole('button', { name: /Kullanıcılar/ }).click();
+  await okan.getByPlaceholder('Tutar').fill('100');
+  await okan.getByRole('button', { name: 'Herkese ver' }).click();
+  await confirmSheet(okan, 'Ver');
+  await toastSeen(okan, /5 hesaba 100 coin eklendi/);
 
   // 9) Sonuçlar
   await sefa.reload();
@@ -180,6 +194,9 @@ try {
   await click(sefa, 'Sonuçlanan');
   await wait(500);
   await shot(sefa, 'kuponlar-sonuc');
+  await click(sefa, 'Herkes');
+  await sefa.getByText('Okan').first().waitFor();
+  await shot(sefa, 'kuponlar-herkes');
   await tab(sefa, 'İstatistik');
   await wait(500);
   await shot(sefa, 'istatistik');
@@ -194,6 +211,11 @@ try {
   await tab(sefa, 'Sıralama');
   await wait(500);
   await shot(sefa, 'siralama');
+  await sefa.locator('li').filter({ hasText: 'Okan' }).click();
+  await wait(600);
+  await shot(sefa, 'kisi-kuponlari');
+  await sefa.mouse.click(200, 60);
+  await wait(400);
   await tab(sefa, 'Profil');
   await wait(500);
   await shot(sefa, 'profil');
@@ -202,8 +224,13 @@ try {
   const bal = (await db.query(`select p.display_name, p.balance, coalesce(sum(t.amount),0) s from profiles p left join transactions t on t.user_id=p.id group by p.id order by 1`)).rows;
   for (const r of bal) if (Number(r.balance) !== Number(r.s)) throw new Error('defter tutarsız ' + r.display_name);
   console.log('bakiyeler', bal.map((r) => `${r.display_name}=${r.balance}`).join(' '));
-  const bets = (await db.query(`select p.display_name, b.status, b.stake, b.odds, b.payout from bets b join profiles p on p.id=b.user_id`)).rows;
+  const bets = (await db.query(`select p.display_name, b.status, b.stake, b.commission, b.odds, b.payout from bets b join profiles p on p.id=b.user_id`)).rows;
   console.log('kuponlar', JSON.stringify(bets));
+  for (const b of bets) {
+    if (Number(b.commission) !== Math.round(Number(b.stake) * 5) / 100) throw new Error('kesinti yanlış');
+    if (b.status === 'won' && Number(b.payout) !== Math.round((Number(b.stake) - Number(b.commission)) * Number(b.odds) * 100) / 100) throw new Error('ödeme yanlış');
+  }
+  if (bets.filter((b) => b.display_name === 'Sefa').length !== 3) throw new Error('aynı maça çoklu kupon olmadı');
   const score = Object.fromEntries((await db.query(`select team, count(*)::int c from match_events where match_id=$1 and kind='goal' and deleted_at is null group by team`, [m.id])).rows.map((r) => [r.team, r.c]));
   console.log('skor', JSON.stringify(score));
   // girilen goller: Mavi F, Mavi F, Kırmızı K, Kırmızı (değişim sonrası forvet), Mavi K (son top), Mavi F, Mavi F (son top)

@@ -144,6 +144,7 @@ interface Core {
   half: number[][];
   pNone: Record<Slot, number>; // oyuncunun maçta hiç gol atamama olasılığı
   goals: Record<Slot, number[]>; // oyuncunun maçtaki gol sayısı dağılımı
+  htft: number[][]; // [ilk yarı sonucu][maç sonucu], sıra: A, D, B
   q: Record<Slot, number>; // ilk golü atma olasılığı
 }
 
@@ -182,7 +183,21 @@ function core(rates: Record<Slot, number>, N: number): Core {
     for (let a = 0; a <= 2 * N; a++) for (let j = 0; j <= 2; j++) g[a + j] += P[a] * bin[j];
     goals[s] = g;
   }
-  return { full: normalize(full), half, pNone, q, goals };
+  // İY/MS: iki yarı bağımsız; yarıların gol farkı dağılımından O(N²) ile
+  const off = N + 1;
+  const diff = new Array(2 * off + 1).fill(0);
+  half.forEach((row, a) => row.forEach((v, b) => (diff[a - b + off] += v)));
+  const idx = (d: number) => (d > 0 ? 0 : d === 0 ? 1 : 2);
+  const htft = [0, 1, 2].map(() => [0, 0, 0]);
+  diff.forEach((p1, i) => {
+    if (p1 < 1e-15) return;
+    const d1 = i - off;
+    diff.forEach((p2, j) => {
+      if (p2 < 1e-15) return;
+      htft[idx(d1)][idx(d1 + j - off)] += p1 * p2;
+    });
+  });
+  return { full: normalize(full), half, pNone, q, goals, htft };
 }
 
 /** 4×4 simetrik matrisin simetrik karekökü (Jacobi özdeğer ayrışımı); tek ve tabana bağımsızdır */
@@ -278,6 +293,7 @@ export function priceMatch(
   const pNone = { AF: 0, AK: 0, BF: 0, BK: 0 } as Record<Slot, number>;
   const qFirst = { AF: 0, AK: 0, BF: 0, BK: 0 } as Record<Slot, number>;
   const pGoals = { AF: [], AK: [], BF: [], BK: [] } as Record<Slot, number[]>;
+  const htft = [0, 1, 2].map(() => [0, 0, 0]);
   if (!draws.length) draws = [rates];
   const k = 1 / draws.length;
   draws.forEach((r, i) => {
@@ -293,6 +309,7 @@ export function priceMatch(
       qFirst[s] += c.q[s] * k;
       c.goals[s].forEach((v, g) => (pGoals[s][g] = (pGoals[s][g] ?? 0) + v * k));
     }
+    c.htft.forEach((row, i) => row.forEach((v, j) => (htft[i][j] += v * k)));
   });
 
   let pA = 0, pD = 0, pB = 0, eA = 0, eB = 0, pBtts = 0;
@@ -309,7 +326,15 @@ export function priceMatch(
     }),
   );
   let hA = 0, hD = 0, hB = 0;
-  half.forEach((row, a) => row.forEach((q, b) => (a > b ? (hA += q) : a < b ? (hB += q) : (hD += q))));
+  const halfTotal: number[] = [];
+  half.forEach((row, a) =>
+    row.forEach((q, b) => {
+      if (a > b) hA += q;
+      else if (a < b) hB += q;
+      else hD += q;
+      halfTotal[a + b] = (halfTotal[a + b] ?? 0) + q;
+    }),
+  );
 
   const teamA = [lineup.AF, lineup.AK];
   const teamB = [lineup.BF, lineup.BK];
@@ -344,6 +369,31 @@ export function priceMatch(
       { code: '2', label: 'Kırmızı', rule: { k: 'ht', o: 'B' }, prob: hB, allowed: teamB },
     ], o),
   );
+  // İkinci yarı: yarılar aynı dağılımda ve bağımsız olduğundan olasılıklar ilk yarıyla aynıdır
+  markets.push(
+    market('h2', 'İkinci Yarı Sonucu', [
+      { code: '1', label: 'Mavi', rule: { k: 'h2', o: 'A' }, prob: hA, allowed: teamA },
+      { code: 'X', label: 'Beraberlik', rule: { k: 'h2', o: 'D' }, prob: hD, allowed: [] },
+      { code: '2', label: 'Kırmızı', rule: { k: 'h2', o: 'B' }, prob: hB, allowed: teamB },
+    ], o),
+  );
+  const OUT = ['A', 'D', 'B'] as const;
+  const short = { A: '1', D: 'X', B: '2' } as const;
+  const long = { A: 'Mavi', D: 'Ber.', B: 'Kırmızı' } as const;
+  const htftSels: Omit<SelectionDef, 'odds'>[] = [];
+  OUT.forEach((h, i) =>
+    OUT.forEach((f, j) =>
+      htftSels.push({
+        code: `${short[h]}/${short[f]}`,
+        label: `${long[h]} / ${long[f]}`,
+        rule: { k: 'htft', ht: h, ft: f },
+        prob: htft[i][j],
+        // oynayan sadece takımının hem ilk yarıyı hem maçı aldığı seçeneğe oynayabilir
+        allowed: h === f && h !== 'D' ? teamOf(h) : [],
+      }),
+    ),
+  );
+  markets.push(market('htft', 'İlk Yarı / Maç Sonucu', htftSels, o));
 
   // Alt/Üst: üst olasılığı %50'ye en yakın çizgi + bir alt + bir üst çizgi
   const pOver = (line: number) => overProb(totalDist, line);
@@ -356,6 +406,20 @@ export function priceMatch(
       market(`ou_${L}`, `Toplam Gol ${lbl} Alt/Üst`, [
         { code: 'U', label: `${lbl} Alt`, rule: { k: 'ou', line: L, side: 'under' }, prob: 1 - p, allowed: [] },
         { code: 'O', label: `${lbl} Üst`, rule: { k: 'ou', line: L, side: 'over' }, prob: p, allowed: [] },
+      ], o),
+    );
+  }
+
+  // İlk yarı alt/üst
+  const htMain = mainLine(halfTotal);
+  for (const L of [htMain - 1, htMain, htMain + 1]) {
+    if (L < 0.5) continue;
+    const p = overProb(halfTotal, L);
+    const lbl = L.toFixed(1).replace('.', ',');
+    markets.push(
+      market(`htou_${L}`, `İlk Yarı ${lbl} Alt/Üst`, [
+        { code: 'U', label: `İY ${lbl} Alt`, rule: { k: 'htou', line: L, side: 'under' }, prob: 1 - p, allowed: [] },
+        { code: 'O', label: `İY ${lbl} Üst`, rule: { k: 'htou', line: L, side: 'over' }, prob: p, allowed: [] },
       ], o),
     );
   }

@@ -112,6 +112,7 @@ async function tableGet(claims, table, q, wantObject) {
       order = 'order by ' + v.split(',').map((o) => { const [c, d] = o.split('.'); return `${ident(c)} ${d === 'desc' ? 'desc' : 'asc'}`; }).join(', ');
     } else if (k === 'limit') limit = `limit ${Number(v)}`;
     else if (v.startsWith('eq.')) { params.push(v.slice(3)); where.push(`t.${ident(k)}::text = $${params.length}`); }
+    else if (v.startsWith('neq.')) { params.push(v.slice(4)); where.push(`t.${ident(k)}::text <> $${params.length}`); }
     else if (v.startsWith('in.(')) {
       const vals = v.slice(4, -1).split(',').map((x) => x.replace(/^"|"$/g, ''));
       params.push(vals); where.push(`t.${ident(k)}::text = any($${params.length})`);

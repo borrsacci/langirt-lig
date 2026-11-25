@@ -72,6 +72,7 @@ export interface Bet {
   match_id: string;
   selection_id: string;
   stake: number;
+  commission: number;
   odds: number;
   status: 'open' | 'won' | 'lost' | 'void' | 'cancelled';
   payout: number;

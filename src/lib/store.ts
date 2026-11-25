@@ -4,7 +4,7 @@ import { rpc } from './api';
 import { supabase } from './supabase';
 import type { Bet, HistoryMatch, LeaderRow, Market, MatchEvent, MatchRow, Player, Profile, Selection } from './types';
 
-type Part = 'me' | 'profiles' | 'players' | 'current' | 'events' | 'markets' | 'matchBets' | 'myBets' | 'queue' | 'history' | 'leaderboard';
+type Part = 'me' | 'profiles' | 'players' | 'current' | 'events' | 'markets' | 'matchBets' | 'myBets' | 'allBets' | 'queue' | 'history' | 'leaderboard';
 
 interface State {
   booted: boolean;
@@ -17,6 +17,8 @@ interface State {
   markets: (Market & { selections: Selection[] })[];
   matchBets: Bet[];
   myBets: Bet[];
+  /** herkesin kuponları (maç başladıktan sonra görünür hale gelenler) */
+  allBets: Bet[];
   queue: MatchRow[];
   history: HistoryMatch[];
   leaderboard: LeaderRow[];
@@ -35,7 +37,7 @@ const num = <T extends Record<string, any>>(o: T, keys: (keyof T)[]): T => {
   return c;
 };
 const fixBet = (b: any): Bet => {
-  const x = num(b, ['stake', 'odds', 'payout']);
+  const x = num(b, ['stake', 'odds', 'payout', 'commission']);
   if (x.selection) x.selection = num(x.selection, ['odds', 'prob']);
   return x;
 };
@@ -114,6 +116,15 @@ export const useStore = create<State>((set, get) => {
         .limit(300);
       if (data) set({ myBets: data.map(fixBet) });
     },
+    allBets: async () => {
+      const { data } = await supabase
+        .from('bets')
+        .select('*, selection:selections(*, market:markets(*)), match:matches(*)')
+        .neq('status', 'cancelled')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (data) set({ allBets: data.map(fixBet) });
+    },
     queue: async () => {
       const { data } = await supabase.from('matches').select('*').in('status', ['review', 'pending']).order('created_at');
       if (data) set({ queue: data as MatchRow[] });
@@ -139,6 +150,7 @@ export const useStore = create<State>((set, get) => {
     markets: [],
     matchBets: [],
     myBets: [],
+    allBets: [],
     queue: [],
     history: [],
     leaderboard: [],
@@ -162,14 +174,15 @@ export const useStore = create<State>((set, get) => {
       if (gen !== generation) return;
       const me = get().me;
       if (me?.status === 'active') {
-        await Promise.all([get().refresh('profiles', 'players', 'current', 'myBets', 'queue', 'history', 'leaderboard'), get().syncClock()]);
+        await Promise.all([get().refresh('profiles', 'players', 'current', 'myBets', 'allBets', 'queue', 'history', 'leaderboard'), get().syncClock()]);
         if (gen !== generation) return;
         channel = supabase
           .channel(`db-${gen}-${Date.now()}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, (p: any) => {
             const st = p.new?.status;
             const parts: Part[] = ['current', 'queue', 'myBets'];
-            if (st === 'approved' || st === 'rejected' || st === 'cancelled') parts.push('history', 'leaderboard', 'me');
+            if (st === 'approved' || st === 'rejected' || st === 'cancelled') parts.push('history', 'leaderboard', 'me', 'allBets');
+            if (st === 'live') parts.push('allBets');
             if (p.new?.id && p.new.id === get().current?.id) {
               // canlı skor için gelen satırı beklemeden uygula
               if ((p.new.version ?? 0) >= (get().current?.version ?? 0)) set({ current: { ...get().current!, ...p.new } });
@@ -177,7 +190,7 @@ export const useStore = create<State>((set, get) => {
             schedule(...parts);
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'match_events' }, () => schedule('events'))
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'bets' }, () => schedule('matchBets', 'myBets', 'leaderboard'))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'bets' }, () => schedule('matchBets', 'myBets', 'allBets', 'leaderboard'))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => schedule('me', 'profiles', 'leaderboard'))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => schedule('players'))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'selections' }, () => schedule('markets', 'myBets'))

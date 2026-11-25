@@ -16,6 +16,14 @@ export function settleRule(rule: BetRule, f: MatchFacts): BetResult {
       return won(rule.o.includes(outcome(f.goalsA, f.goalsB)));
     case 'ht':
       return won(outcome(f.htA, f.htB) === rule.o);
+    case 'h2':
+      return won(outcome(f.goalsA - f.htA, f.goalsB - f.htB) === rule.o);
+    case 'htft':
+      return won(outcome(f.htA, f.htB) === rule.ht && outcome(f.goalsA, f.goalsB) === rule.ft);
+    case 'htou': {
+      const t = f.htA + f.htB;
+      return won(rule.side === 'over' ? t > rule.line : t < rule.line);
+    }
     case 'ou': {
       const t = f.goalsA + f.goalsB;
       return won(rule.side === 'over' ? t > rule.line : t < rule.line);
@@ -43,6 +51,12 @@ export function ruleText(rule: BetRule, name: (id: string) => string): string {
       return `ÇŞ ${o(rule.o[0])} / ${o(rule.o[1])}`;
     case 'ht':
       return `İY ${o(rule.o)}`;
+    case 'h2':
+      return `2. yarı ${o(rule.o)}`;
+    case 'htft':
+      return `İY/MS ${o(rule.ht)} / ${o(rule.ft)}`;
+    case 'htou':
+      return `İY ${rule.line.toFixed(1).replace('.', ',')} ${rule.side === 'over' ? 'Üst' : 'Alt'}`;
     case 'ou':
       return `${rule.line.toFixed(1).replace('.', ',')} ${rule.side === 'over' ? 'Üst' : 'Alt'}`;
     case 'btts':

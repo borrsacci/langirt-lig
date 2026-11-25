@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { deriveFacts, lineupAfter, liveEvents } from '../../supabase/functions/_shared/game.ts';
 import { ruleText } from '../../supabase/functions/_shared/settle.ts';
 import { HALF_MS, type Lineup, type Team } from '../../supabase/functions/_shared/types.ts';
-import { clock, coin, odds as fmtOdds, pct, when } from '../lib/format';
+import { betWin, clock, coin, odds as fmtOdds, pct, when } from '../lib/format';
 import { useStore, usePlayerName } from '../lib/store';
 import type { Bet, MatchEvent, MatchRow } from '../lib/types';
 import { cn, TeamDot } from './kit';
@@ -182,7 +182,7 @@ export function BetRow({ bet, live, showUser }: { bet: Bet; live?: 'won' | 'lost
   const profiles = useStore((s) => s.profiles);
   const sel = bet.selection;
   const label = sel ? ruleText(sel.rule, name) : 'Seçim';
-  const win = Math.round(bet.stake * bet.odds * 100) / 100;
+  const win = betWin(bet);
   return (
     <div className="flex items-center gap-3 py-3">
       <div className="min-w-0 flex-1">

@@ -3,6 +3,7 @@ import { START_BALANCE } from '../../supabase/functions/_shared/types.ts';
 import { coin, odds, pct, signed } from '../lib/format';
 import { useStore } from '../lib/store';
 import type { LeaderRow } from '../lib/types';
+import { UserBetsSheet } from '../ui/bets';
 import { Coin, Empty, Segmented, cn } from '../ui/kit';
 
 type K = 'balance' | 'profit' | 'hit' | 'win' | 'odds';
@@ -25,6 +26,7 @@ export function RanksScreen() {
   const rows = useStore((s) => s.leaderboard);
   const me = useStore((s) => s.me)!;
   const [k, setK] = useState<K>('balance');
+  const [sel, setSel] = useState<string | null>(null);
   const d = defs[k];
   const ranked = rows
     .map((r) => ({ r, v: d.value(r) }))
@@ -34,7 +36,7 @@ export function RanksScreen() {
   return (
     <div className="space-y-4 pt-2">
       <Segmented value={k} onChange={setK} items={(Object.keys(defs) as K[]).map((x) => [x, defs[x].label])} />
-      <p className="px-1 text-sm text-dim">{d.hint}</p>
+      <p className="px-1 text-sm text-dim">{d.hint}. Kişinin kuponlarını görmek için üstüne dokunun.</p>
       {ranked.length === 0 ? (
         <Empty title="Henüz sıralama yok">Kuponlar sonuçlandıkça burası dolacak.</Empty>
       ) : (
@@ -42,7 +44,8 @@ export function RanksScreen() {
           {ranked.map(({ r }, i) => (
             <li
               key={r.user_id}
-              className={cn('flex items-center gap-3 rounded-xl px-4 py-3', r.user_id === me.id ? 'bg-felt-2 ring-1 ring-brass/40' : 'bg-felt')}
+              onClick={() => setSel(r.user_id)}
+              className={cn('flex items-center gap-3 rounded-xl px-4 py-3 active:bg-felt-2', r.user_id === me.id ? 'bg-felt-2 ring-1 ring-brass/40' : 'bg-felt')}
             >
               <span className={cn('w-7 font-display text-2xl font-bold num', i === 0 ? 'text-brass' : 'text-dim')}>{i + 1}</span>
               <div className="min-w-0 flex-1">
@@ -63,6 +66,7 @@ export function RanksScreen() {
           ))}
         </ol>
       )}
+      <UserBetsSheet userId={sel} onClose={() => setSel(null)} />
     </div>
   );
 }

@@ -117,6 +117,8 @@ create table public.bets (
   match_id uuid not null references public.matches (id),
   selection_id uuid not null references public.selections (id),
   stake numeric(14, 2) not null check (stake >= 2),
+  -- kasa kesintisi (%5): bahse giren tutar = stake − commission
+  commission numeric(14, 2) not null default 0 check (commission >= 0 and commission < stake),
   odds numeric(6, 2) not null,
   status text not null default 'open' check (status in ('open', 'won', 'lost', 'void', 'cancelled')),
   payout numeric(14, 2) not null default 0,
@@ -655,6 +657,11 @@ begin
     when 'ms' then won := ft = (p_rule ->> 'o');
     when 'dc' then won := ft in (p_rule -> 'o' ->> 0, p_rule -> 'o' ->> 1);
     when 'ht' then won := ht = (p_rule ->> 'o');
+    when 'h2' then
+      won := (case when ga - ha > gb - hb then 'A' when ga - ha < gb - hb then 'B' else 'D' end) = (p_rule ->> 'o');
+    when 'htft' then won := ht = (p_rule ->> 'ht') and ft = (p_rule ->> 'ft');
+    when 'htou' then
+      won := case when p_rule ->> 'side' = 'over' then ha + hb > (p_rule ->> 'line')::numeric else ha + hb < (p_rule ->> 'line')::numeric end;
     when 'ou' then
       won := case when p_rule ->> 'side' = 'over' then t > (p_rule ->> 'line')::numeric else t < (p_rule ->> 'line')::numeric end;
     when 'btts' then won := (ga > 0 and gb > 0) = (p_rule ->> 'yes')::boolean;
@@ -697,7 +704,7 @@ begin
   for b in select * from bets where match_id = p_match and status = 'open' order by created_at for update loop
     select result into v_res from selections where id = b.selection_id;
     if v_res = 'won' then
-      v_pay := round(b.stake * b.odds, 2);
+      v_pay := round((b.stake - b.commission) * b.odds, 2);
       update bets set status = 'won', payout = v_pay, settled_at = now() where id = b.id;
       perform ledger(b.user_id, v_pay, 'payout', b.id, p_match, 'Kazanan kupon');
     elsif v_res = 'void' then
@@ -726,7 +733,7 @@ end $$;
 
 create or replace function public.place_bet(p_selection uuid, p_stake numeric)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare me profiles; s selections; m matches; v_bet uuid; nb numeric;
+declare me profiles; s selections; m matches; v_bet uuid; nb numeric; v_comm numeric;
 begin
   me := require_active();
   select * into s from selections where id = p_selection;
@@ -743,10 +750,11 @@ begin
   end if;
   select * into me from profiles where id = me.id for update;
   if me.balance < p_stake then raise exception 'Yetersiz bakiye' using errcode = 'P0001'; end if;
-  insert into bets (user_id, match_id, selection_id, stake, odds)
-  values (me.id, m.id, s.id, p_stake, s.odds) returning id into v_bet;
-  nb := ledger(me.id, -p_stake, 'bet', v_bet, m.id, null);
-  return jsonb_build_object('bet_id', v_bet, 'balance', nb);
+  v_comm := round(p_stake * 0.05, 2); -- kasa kesintisi %5
+  insert into bets (user_id, match_id, selection_id, stake, commission, odds)
+  values (me.id, m.id, s.id, p_stake, v_comm, s.odds) returning id into v_bet;
+  nb := ledger(me.id, -p_stake, 'bet', v_bet, m.id, 'Kupon (kasa kesintisi ' || v_comm::text || ')');
+  return jsonb_build_object('bet_id', v_bet, 'balance', nb, 'commission', v_comm);
 end $$;
 
 create or replace function public.cancel_bet(p_bet uuid) returns numeric
@@ -762,6 +770,39 @@ begin
   if m.status <> 'open' or b.status <> 'open' then raise exception 'Maç başladı, kupon iptal edilemez' using errcode = 'P0001'; end if;
   update bets set status = 'cancelled', settled_at = now() where id = p_bet;
   return ledger(b.user_id, b.stake, 'refund', b.id, b.match_id, 'Kupon iptal');
+end $$;
+
+-- Admin: tüm aktif hesaplara aynı anda coin
+create or replace function public.admin_grant_all(p_amount numeric, p_note text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare u uuid; n int := 0;
+begin
+  perform require_admin();
+  if p_amount is null or p_amount <= 0 or p_amount <> round(p_amount, 2) then
+    raise exception 'Geçersiz tutar' using errcode = 'P0001';
+  end if;
+  for u in select id from profiles where status = 'active' order by id for update loop
+    perform ledger(u, p_amount, 'admin', null, null, coalesce(nullif(btrim(p_note), ''), 'Admin hediyesi'));
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+-- Admin: kasanın durumu
+create or replace function public.admin_house_stats() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r jsonb;
+begin
+  perform require_admin();
+  select jsonb_build_object(
+    'commission', coalesce(sum(commission) filter (where status in ('open', 'won', 'lost')), 0),
+    'staked', coalesce(sum(stake) filter (where status in ('won', 'lost')), 0),
+    'paid', coalesce(sum(payout) filter (where status = 'won'), 0),
+    'open_stake', coalesce(sum(stake) filter (where status = 'open'), 0),
+    'bets', count(*) filter (where status <> 'cancelled'),
+    'coins_in_play', (select coalesce(sum(balance), 0) from profiles where status = 'active')
+  ) into r from bets;
+  return r;
 end $$;
 
 -- ---------- Okuma ----------
@@ -843,7 +884,7 @@ grant execute on function
   public.record_goal(uuid, uuid, uuid, integer), public.swap_roles(uuid, uuid, text), public.undo_event(uuid, uuid),
   public.finish_early(uuid), public.resume_match(uuid), public.submit_match(uuid), public.admin_add_goal(uuid, uuid, smallint, uuid),
   public.admin_delete_goal(uuid, uuid), public.approve_match(uuid, boolean, text), public.reject_match(uuid, text),
-  public.place_bet(uuid, numeric), public.cancel_bet(uuid), public.approved_history(), public.get_leaderboard()
+  public.place_bet(uuid, numeric), public.cancel_bet(uuid), public.admin_grant_all(numeric, text), public.admin_house_stats(), public.approved_history(), public.get_leaderboard()
 to authenticated;
 grant execute on function public.svc_create_match(uuid, jsonb, jsonb, jsonb), public.approved_history() to service_role;
 

@@ -34,6 +34,9 @@ describe('fiyatlama analitik dağılımı gerçek oyunla birebir uyuşur', () =>
     const N = 30000;
     let a = 0, d = 0, b = 0, ha = 0, hd = 0, btts = 0, aceScores = 0, aceFirst = 0, over: Record<string, number> = {};
     const ouMarkets = pr.markets.filter((m) => m.code.startsWith('ou_') || m.code.startsWith('pgl_'));
+    // her seçenek için gerçekleşen sıklık (tüm pazarlar, genel kontrol)
+    const allSels = pr.markets.flatMap((m) => m.selections);
+    const hits = new Map<string, number>();
     for (let i = 0; i < N; i++) {
       const { events } = simulateMatch(truth, lineup, rng);
       const f = deriveFacts(events);
@@ -42,6 +45,7 @@ describe('fiyatlama analitik dağılımı gerçek oyunla birebir uyuşur', () =>
       if (f.goalsA > 0 && f.goalsB > 0) btts++;
       if ((f.playerGoals['ace'] ?? 0) > 0) aceScores++;
       if (f.firstScorer === 'ace') aceFirst++;
+      for (const s of allSels) if (settleRule(s.rule, f) === 'won') hits.set(s.label + JSON.stringify(s.rule), (hits.get(s.label + JSON.stringify(s.rule)) ?? 0) + 1);
       for (const m of ouMarkets) {
         const sel = m.selections.find((s) => s.code === 'O')!;
         if (settleRule(sel.rule, f) === 'won') over[m.code] = (over[m.code] ?? 0) + 1;
@@ -64,6 +68,13 @@ describe('fiyatlama analitik dağılımı gerçek oyunla birebir uyuşur', () =>
       const sel = m.selections.find((s) => s.code === 'O')!;
       expect(Math.abs((over[m.code] ?? 0) / N - sel.prob)).toBeLessThan(tol);
     }
+    // tüm pazarların tüm seçenekleri (İY/MS, 2. yarı, İY alt/üst dahil) simülasyonla uyuşur
+    for (const s of allSels) {
+      if (s.rule.k === 'fg') continue; // golsüz maç yok, zaten yukarıda kontrol edildi
+      expect(Math.abs((hits.get(s.label + JSON.stringify(s.rule)) ?? 0) / N - s.prob), `${s.label}`).toBeLessThan(tol);
+    }
+    for (const code of ['htft', 'h2']) expect(pr.markets.some((m) => m.code === code)).toBe(true);
+    expect(pr.markets.some((m) => m.code.startsWith('htou_'))).toBe(true);
     // iyi forvet + iyi kaleci karşı karşıya; ikisi de favori sayılmamalı ama dengesiz de değil
     expect(pr.probs.A + pr.probs.D + pr.probs.B).toBeCloseTo(1, 9);
   });
@@ -236,6 +247,11 @@ describe('bahis sonuçlandırma', () => {
     expect(settleRule({ k: 'pgl', player: 'p3', line: 2.5, side: 'over' }, f)).toBe('won');
     expect(settleRule({ k: 'pgl', player: 'p9', line: 0.5, side: 'under' }, f)).toBe('won');
     expect(settleRule({ k: 'fg', player: 'p1' }, f)).toBe('won');
+    expect(settleRule({ k: 'h2', o: 'B' }, f)).toBe('won'); // 2. yarı 1-2
+    expect(settleRule({ k: 'htft', ht: 'A', ft: 'D' }, f)).toBe('won');
+    expect(settleRule({ k: 'htft', ht: 'A', ft: 'A' }, f)).toBe('lost');
+    expect(settleRule({ k: 'htou', line: 2.5, side: 'over' }, f)).toBe('won');
+    expect(settleRule({ k: 'htou', line: 2.5, side: 'under' }, f)).toBe('lost');
     expect(settleRule({ k: 'fg', player: 'p1' }, { ...f, firstScorer: null })).toBe('void');
   });
 });

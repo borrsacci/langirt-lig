@@ -6,6 +6,7 @@ import { deriveFacts, hasSwapped, lineupAfter, liveEvents } from '../../supabase
 import { settleRule } from '../../supabase/functions/_shared/settle.ts';
 import { HALF_MS, type Lineup, MIN_STAKE, type Team, initialLineup } from '../../supabase/functions/_shared/types.ts';
 import { invoke, rpc } from '../lib/api';
+import { COMMISSION, netStake } from '../../supabase/functions/_shared/types.ts';
 import { coin, odds as fmtOdds, payout, pct } from '../lib/format';
 import { keepAwake, onResume, thump, whistle } from '../lib/native';
 import { pairCounts } from '../lib/stats';
@@ -333,8 +334,8 @@ function ModelInfo({ match }: { match: MatchRow }) {
             </div>
           )}
           <p className="text-sm text-dim">
-            Verisi az olan oyuncular için model temkinli davranır ve oranlar dengeye yakın kalır. Her oranda %7 kasa payı vardır;
-            %95'ten olası sonuçlar bahse kapalıdır.
+            Verisi az olan oyuncular için model temkinli davranır ve oranlar dengeye yakın kalır. Oranlarda %7 kasa payı vardır ve
+            her kupondan ayrıca %5 kasa kesintisi alınır. %95'ten olası sonuçlar bahse kapalıdır.
           </p>
         </div>
       </Sheet>
@@ -349,8 +350,8 @@ function Bulletin({ match }: { match: MatchRow }) {
   const inMatch = !!me.player_id && [match.a_f, match.a_k, match.b_f, match.b_k].includes(me.player_id);
   if (!markets.length) return <Empty title="Oranlar yükleniyor" />;
   const groups: [string, (code: string) => boolean][] = [
-    ['Maç', (c) => ['ms', 'dc', 'ht'].includes(c)],
-    ['Goller', (c) => c.startsWith('ou_') || c === 'btts'],
+    ['Maç', (c) => ['ms', 'dc', 'ht', 'h2', 'htft'].includes(c)],
+    ['Goller', (c) => c.startsWith('ou_') || c.startsWith('htou_') || c === 'btts'],
     ['Oyuncular', (c) => c.startsWith('pg_') || c.startsWith('pgl_') || c === 'fg'],
   ];
   return (
@@ -453,9 +454,19 @@ function BetSlip({ slip, onClose }: { slip: { sel: Selection; title: string } | 
               <button onClick={() => setRaw(String(me.balance).replace('.', ','))} className="h-10 rounded-lg bg-felt-2 text-sm font-semibold active:bg-line">Tümü</button>
             </div>
           </div>
-          <div className="flex items-center justify-between rounded-xl bg-pitch px-4 py-3">
-            <span className="text-chrome">Kazanırsan</span>
-            <Coin value={valid ? coin(payout(stake, sel.odds!)) : '—'} className="text-xl text-brass" />
+          <div className="space-y-1.5 rounded-xl bg-pitch px-4 py-3 text-sm">
+            <div className="flex justify-between text-chrome">
+              <span>Kasa kesintisi (%{COMMISSION * 100})</span>
+              <span className="num">{valid ? `−${coin(Math.round((stake - netStake(stake)) * 100) / 100)}` : '—'}</span>
+            </div>
+            <div className="flex justify-between text-chrome">
+              <span>Bahse giren</span>
+              <span className="num">{valid ? coin(netStake(stake)) : '—'}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-line/60 pt-2">
+              <span className="text-base text-chrome">Kazanırsan</span>
+              <Coin value={valid ? coin(payout(netStake(stake), sel.odds!)) : '—'} className="text-xl text-brass" />
+            </div>
           </div>
           <div className="text-sm text-dim">
             Bakiye {coin(me.balance)} · En az {MIN_STAKE} coin
