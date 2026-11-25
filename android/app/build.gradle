@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+// CI'dan -PversionCode=N ile gelir; yerelde 1
+def appVersionCode = (project.findProperty('versionCode') ?: '1').toString().toInteger()
+
 android {
     namespace = "com.langirt.lig"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,8 +11,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // CI her derlemede artan numara verir; böylece yeni APK eskisinin üstüne kurulur
-        versionCode (project.findProperty('versionCode') ?: '1') as Integer
-        versionName "1.0." + ((project.findProperty('versionCode') ?: '1') as String)
+        versionCode appVersionCode
+        versionName "1.0.${appVersionCode}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
