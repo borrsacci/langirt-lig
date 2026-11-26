@@ -83,7 +83,7 @@ jobs:
         run: |
           if [ -z "$FSA" ]; then echo "::warning::FIREBASE_SERVICE_ACCOUNT yok; Android bildirimleri gönderilemez."; exit 0; fi
           COMPACT=$(echo "$FSA" | jq -c . ) || { echo "::error::FIREBASE_SERVICE_ACCOUNT geçerli bir JSON değil"; exit 1; }
-          supabase secrets set --project-ref "$REF" FIREBASE_SERVICE_ACCOUNT="$COMPACT"
+          supabase secrets set --project-ref "$REF" --yes FIREBASE_SERVICE_ACCOUNT="$COMPACT"
 
   android:
     name: APK
