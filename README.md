@@ -75,10 +75,9 @@ Sonraki yayında adres `https://langirt-lig.pages.dev` olur. iPhone'da bu adres 
 
 ### Bildirimler
 
-Bahisler açılınca maçta oynamayan herkese bildirim gider. Maç onaylanınca herkese skor, kupon yapanlara kupon sonucu, oynayanlara maç ödülü bildirilir. Herkes **Profil → Bildirimler** bölümünden bildirimleri açar.
+Bildirimler **sadece Android uygulamasına** gider; iPhone/web sürümüne gitmez. Bahisler açılınca maçta oynamayan herkese bildirim gider. Maç onaylanınca herkese skor, kupon yapanlara kupon sonucu, oynayanlara maç ödülü bildirilir. Herkes **Profil → Bildirimler** bölümünden bildirimleri açar.
 
-- **iPhone**: Ek kurulum gerekmez. Uygulama Safari'de ana ekrana eklenmiş olmalı (iOS 16.4+).
-- **Android**: Firebase gerekir. [Firebase](https://console.firebase.google.com)'de proje açılır ve `com.langirt.lig` paket adıyla Android uygulaması eklenir. Sonra iki GitHub secret eklenir: `google-services.json` dosyasının içeriği `GOOGLE_SERVICES_JSON` olarak, **Project settings → Service accounts → Generate new private key** dosyasının içeriği `FIREBASE_SERVICE_ACCOUNT` olarak.
+Kurulum için [Firebase](https://console.firebase.google.com)'de proje açılır ve `com.langirt.lig` paket adıyla Android uygulaması eklenir. Sonra iki GitHub secret eklenir: `google-services.json` dosyasının içeriği `GOOGLE_SERVICES_JSON` olarak, **Project settings → Service accounts → Generate new private key** dosyasının içeriği `FIREBASE_SERVICE_ACCOUNT` olarak.
 
 ## Bilinmesi gerekenler
 

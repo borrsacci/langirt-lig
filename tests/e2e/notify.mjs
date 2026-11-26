@@ -72,7 +72,9 @@ async function subscribe(user, name) {
   const pub = new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey));
   const auth = crypto.getRandomValues(new Uint8Array(16));
   subs[name] = { keys, pub, auth };
-  await rpc(user.tok, 'register_push', { p_kind: 'web', p_token: `http://127.0.0.1:54500/${name}`, p_keys: { p256dh: b64(pub), auth: b64(auth) } });
+  // Gerçekte bildirimler sadece Android'e (FCM) gider; mesaj içeriklerini yerelde doğrulayabilmek için
+  // test aboneliği doğrudan eklenir ve fonksiyonlar PUSH_KINDS=fcm,web ile çalıştırılır.
+  await db.query(`insert into push_subscriptions (user_id, kind, token, keys) values ($1, 'web', $2, $3)`, [user.id, `http://127.0.0.1:54500/${name}`, { p256dh: b64(pub), auth: b64(auth) }]);
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -91,6 +93,13 @@ try {
   check(v1.publicKey && v1.publicKey === v2.publicKey, 'VAPID anahtarı değişti');
   check((await db.query(`select count(*)::int c from app_secrets`)).rows[0].c === 1, 'app_secrets tek kayıt değil');
 
+  // web/iPhone aboneliği kabul edilmez (bildirim sadece Android)
+  let webRejected = false;
+  try { await rpc(U.sefa.tok, 'register_push', { p_kind: 'web', p_token: 'https://x.test/1', p_keys: { p256dh: 'a', auth: 'b' } }); } catch { webRejected = true; }
+  check(webRejected, 'web aboneliği kabul edildi');
+  await rpc(U.sefa.tok, 'register_push', { p_kind: 'fcm', p_token: 'fcm-test-token', p_keys: null });
+  check((await db.query(`select count(*)::int c from push_subscriptions where token='fcm-test-token'`)).rows[0].c === 1, 'Android kaydı eklenmedi');
+  await db.query(`delete from push_subscriptions where token='fcm-test-token'`);
   // abonelikler: Sefa (izleyici), Okan (oyuncu), Sefa'nın eski telefonu (süresi dolmuş)
   await subscribe(U.sefa, 'sefa');
   await subscribe(admin, 'okan');

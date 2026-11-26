@@ -1,4 +1,4 @@
-// Bildirim aboneliği: Android uygulamasında Firebase (FCM), tarayıcıda/iPhone'da Web Push
+// Bildirim aboneliği: sadece Android uygulamasında, Firebase (FCM) ile
 import { PushNotifications } from '@capacitor/push-notifications';
 import { invoke, rpc } from './api';
 import { isNative } from './native';
@@ -9,8 +9,6 @@ const fcmEnabled = import.meta.env.VITE_FCM === '1';
 
 export type PushState = 'on' | 'off' | 'denied' | 'unsupported' | 'ios-install';
 
-const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const standalone = () => window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
 
 function store(token: string | null) {
   try {
@@ -35,13 +33,8 @@ export async function pushState(): Promise<PushState> {
     if (p.receive === 'denied') return 'denied';
     return p.receive === 'granted' && stored() ? 'on' : 'off';
   }
-  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-    return isIos() && !standalone() ? 'ios-install' : 'unsupported';
-  }
-  if (Notification.permission === 'denied') return 'denied';
-  const reg = await navigator.serviceWorker.getRegistration();
-  const sub = await reg?.pushManager.getSubscription();
-  return Notification.permission === 'granted' && sub ? 'on' : 'off';
+  // Bildirimler sadece Android uygulamasında (web/iPhone sürümünde yok)
+  return 'unsupported';
 }
 
 let listenersReady = false;
@@ -58,22 +51,6 @@ async function nativeListeners() {
   });
 }
 
-async function registerWeb(): Promise<void> {
-  const reg = await navigator.serviceWorker.register('./sw.js');
-  await navigator.serviceWorker.ready;
-  const { publicKey } = await invoke<{ publicKey: string }>('notify', { action: 'vapid' });
-  let sub = await reg.pushManager.getSubscription();
-  const keyMatches = sub && arrEq(new Uint8Array(sub.options.applicationServerKey ?? new ArrayBuffer(0)), urlB64(publicKey));
-  if (sub && !keyMatches) {
-    await sub.unsubscribe();
-    sub = null;
-  }
-  sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(publicKey) as BufferSource });
-  const j = sub.toJSON();
-  store(sub.endpoint);
-  await rpc('register_push', { p_kind: 'web', p_token: sub.endpoint, p_keys: { p256dh: j.keys?.p256dh, auth: j.keys?.auth } });
-}
-
 /** Kullanıcı "Bildirimleri aç"a basınca (izin isteği bir dokunuşla tetiklenmeli) */
 export async function enablePush(): Promise<PushState> {
   if (isNative) {
@@ -88,12 +65,7 @@ export async function enablePush(): Promise<PushState> {
     for (let i = 0; i < 20 && !stored(); i++) await new Promise((r) => setTimeout(r, 250));
     return stored() ? 'on' : 'off';
   }
-  const st = await pushState();
-  if (st === 'unsupported' || st === 'ios-install') return st;
-  const perm = await Notification.requestPermission();
-  if (perm !== 'granted') return perm === 'denied' ? 'denied' : 'off';
-  await registerWeb();
-  return 'on';
+  return 'unsupported';
 }
 
 /** Uygulama açılışında: izin önceden verildiyse kaydı tazeler (anahtarlar değişebilir) */
@@ -111,7 +83,14 @@ export async function initPush() {
       if (p.receive === 'granted') await PushNotifications.register();
       return;
     }
-    if ('Notification' in window && Notification.permission === 'granted' && 'PushManager' in window) await registerWeb();
+    // web sürümünde önceden açılmış abonelik varsa kapat
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+    const sub = await reg?.pushManager?.getSubscription();
+    if (sub) {
+      await rpc('unregister_push', { p_token: sub.endpoint }).catch(() => {});
+      await sub.unsubscribe().catch(() => {});
+      store(null);
+    }
   } catch {
     /* bildirim olmadan da uygulama çalışır */
   }
@@ -127,12 +106,4 @@ export async function unregisterThisDevice() {
 
 export async function sendTestPush() {
   return invoke<{ sent: number; failed: number }>('notify', { action: 'test' });
-}
-
-function urlB64(s: string): Uint8Array {
-  const p = s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4);
-  return Uint8Array.from(atob(p), (c) => c.charCodeAt(0));
-}
-function arrEq(a: Uint8Array, b: Uint8Array) {
-  return a.length === b.length && a.every((x, i) => x === b[i]);
 }

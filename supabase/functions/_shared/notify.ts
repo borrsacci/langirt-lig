@@ -32,7 +32,9 @@ function serviceAccount(): ServiceAccount | null {
 export async function sendToUsers(svc: SupabaseClient, msgFor: Map<string, PushMessage>): Promise<{ sent: number; failed: number }> {
   const ids = [...msgFor.keys()];
   if (!ids.length) return { sent: 0, failed: 0 };
-  const { data: subs } = await svc.from('push_subscriptions').select('*').in('user_id', ids);
+  // Bildirimler sadece Android uygulamasına (FCM) gider. PUSH_KINDS sadece testlerde değiştirilir.
+  const kinds = (Deno.env.get('PUSH_KINDS') ?? 'fcm').split(',');
+  const { data: subs } = await svc.from('push_subscriptions').select('*').in('user_id', ids).in('kind', kinds);
   if (!subs?.length) return { sent: 0, failed: 0 };
   const sa = serviceAccount();
   const vapid = subs.some((s) => s.kind === 'web') ? await getVapid(svc) : null;

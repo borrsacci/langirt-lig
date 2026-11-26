@@ -2,6 +2,7 @@ import { BellRing } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { errText } from '../lib/api';
 import { enablePush, type PushState, pushState, sendTestPush } from '../lib/push';
+import { isNative } from '../lib/native';
 import { Button, Card, cn, toast } from './kit';
 
 const TEXT: Record<PushState, string> = {
@@ -35,7 +36,7 @@ async function turnOn(set: (s: PushState) => void) {
 
 export function NotificationsCard() {
   const [st, setSt] = usePushState();
-  if (!st) return null;
+  if (!st || (st === 'unsupported' && !isNative)) return null; // web/iPhone sürümünde bildirim yok
   return (
     <Card className="space-y-3">
       <div className="flex items-center gap-2">
