@@ -76,6 +76,14 @@ jobs:
       - name: Sunucu fonksiyonlarını yükle
         if: steps.check.outputs.configured == 'true'
         run: supabase functions deploy --project-ref "$REF" --yes
+      - name: Android bildirim anahtarını sunucuya aktar
+        if: steps.check.outputs.configured == 'true'
+        env:
+          FSA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FSA" ]; then echo "::warning::FIREBASE_SERVICE_ACCOUNT yok; Android bildirimleri gönderilemez."; exit 0; fi
+          COMPACT=$(echo "$FSA" | jq -c . ) || { echo "::error::FIREBASE_SERVICE_ACCOUNT geçerli bir JSON değil"; exit 1; }
+          supabase secrets set --project-ref "$REF" FIREBASE_SERVICE_ACCOUNT="$COMPACT"
 
   android:
     name: APK
@@ -119,6 +127,16 @@ jobs:
           echo "::add-mask::$ANON"; echo "::add-mask::$SERVICE"
           echo "ANON=$ANON" >> "$GITHUB_ENV"; echo "SERVICE=$SERVICE" >> "$GITHUB_ENV"
       - run: npm ci
+      - name: Firebase (Android bildirimleri)
+        env:
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GSJ" ]; then echo "::warning::GOOGLE_SERVICES_JSON yok; APK bildirimsiz derlenecek."; exit 0; fi
+          echo "$GSJ" | jq . > android/app/google-services.json || { echo "::error::GOOGLE_SERVICES_JSON geçerli bir JSON değil"; exit 1; }
+          if ! jq -e '.client[].client_info.android_client_info.package_name | select(. == "com.langirt.lig")' android/app/google-services.json >/dev/null; then
+            echo "::error::google-services.json içinde com.langirt.lig paketi yok (Firebase'e Android uygulaması bu adla eklenmeli)"; exit 1
+          fi
+          echo "VITE_FCM=1" >> "$GITHUB_ENV"
       - name: Web uygulamasını derle
         run: npm run build
         env:

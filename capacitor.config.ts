@@ -7,6 +7,7 @@ const config: CapacitorConfig = {
   android: { backgroundColor: '#0A2A21' },
   plugins: {
     StatusBar: { backgroundColor: '#0A2A21', style: 'DARK', overlaysWebView: false },
+    PushNotifications: { presentationOptions: ['badge', 'sound', 'alert'] },
   },
 };
 

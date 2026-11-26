@@ -71,7 +71,7 @@ function projection(table, alias, select) {
   const cols = [];
   for (const item of splitTop(select)) {
     if (item === '*') { cols.push(`${alias}.*`); continue; }
-    const m = item.match(/^(?:([a-z_]+):)?([a-z_]+)\((.*)\)$/);
+    const m = item.replace('!inner', '').match(/^(?:([a-z_]+):)?([a-z_]+)\((.*)\)$/);
     if (!m) { cols.push(`${alias}.${ident(item)}`); continue; }
     const [, as, rel, inner] = m;
     const a = `r${++aliasN}`;
@@ -102,21 +102,69 @@ async function withRole(claims, fn) {
   }
 }
 
+function filters(table, q, params, alias = 't') {
+  const where = [];
+  for (const [k, v] of q) {
+    if (['select', 'order', 'limit', 'on_conflict', 'columns'].includes(k)) continue;
+    let col = `${alias}.${ident(k)}`;
+    if (k.includes('.')) {
+      // gömülü tablo filtresi (ör. market.code=eq.ms): ilişkili satırın sütunu
+      const [rel, c] = k.split('.');
+      const sel = new URLSearchParams(q).get('select') ?? '';
+      const relTable = (sel.match(new RegExp(`${rel}:([a-z_]+)`)) ?? [])[1] ?? rel;
+      const fk = fks.find((f) => f.t === table && f.ref === relTable);
+      col = `(select x.${ident(c)} from public.${ident(relTable)} x where x.id = ${alias}.${ident(fk.c)})`;
+    }
+    if (v.startsWith('eq.')) { params.push(v.slice(3)); where.push(`${col}::text = $${params.length}`); }
+    else if (v.startsWith('neq.')) { params.push(v.slice(4)); where.push(`${col}::text <> $${params.length}`); }
+    else if (v === 'is.null') where.push(`${col} is null`);
+    else if (v.startsWith('in.(')) {
+      const vals = v.slice(4, -1).split(',').map((x) => x.replace(/^"|"$/g, ''));
+      params.push(vals); where.push(`${col}::text = any($${params.length})`);
+    } else throw new Error('unsupported filter ' + k + '=' + v);
+  }
+  return where;
+}
+
+async function tableWrite(claims, method, table, q, body, prefer, wantObject) {
+  await loadFks();
+  const params = [];
+  const ret = /return=representation/.test(prefer ?? '');
+  let sql;
+  if (method === 'PATCH') {
+    const sets = Object.entries(body).map(([k, v]) => { params.push(v !== null && typeof v === 'object' ? JSON.stringify(v) : v); return `${ident(k)} = $${params.length}`; });
+    const where = filters(table, q, params, 't');
+    sql = `with r as (update public.${ident(table)} t set ${sets.join(', ')} ${where.length ? 'where ' + where.join(' and ') : ''} returning t.*) select coalesce(json_agg(r), '[]') j from r`;
+  } else if (method === 'DELETE') {
+    const where = filters(table, q, params, 't');
+    sql = `with r as (delete from public.${ident(table)} t ${where.length ? 'where ' + where.join(' and ') : ''} returning t.*) select coalesce(json_agg(r), '[]') j from r`;
+  } else {
+    const rows = Array.isArray(body) ? body : [body];
+    const cols = Object.keys(rows[0]);
+    const vals = rows.map((r) => '(' + cols.map((c) => { params.push(r[c] !== null && typeof r[c] === 'object' ? JSON.stringify(r[c]) : r[c]); return `$${params.length}`; }).join(', ') + ')');
+    let conflict = '';
+    const oc = q.get('on_conflict');
+    if (/resolution=ignore-duplicates/.test(prefer ?? '')) conflict = `on conflict ${oc ? `(${ident(oc)})` : ''} do nothing`;
+    else if (/resolution=merge-duplicates/.test(prefer ?? '')) conflict = `on conflict (${ident(oc ?? 'id')}) do update set ${cols.map((c) => `${ident(c)} = excluded.${ident(c)}`).join(', ')}`;
+    sql = `with r as (insert into public.${ident(table)} (${cols.map(ident).join(', ')}) values ${vals.join(', ')} ${conflict} returning *) select coalesce(json_agg(r), '[]') j from r`;
+  }
+  const rows = await withRole(claims, (c) => c.query(sql, params).then((r) => r.rows[0].j));
+  if (!ret) return [method === 'POST' ? 201 : 204, undefined];
+  if (!wantObject) return [200, rows];
+  if (rows.length === 1) return [200, rows[0]];
+  return [406, { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned', details: `The result contains ${rows.length} rows`, hint: null }];
+}
+
 async function tableGet(claims, table, q, wantObject) {
   await loadFks();
   const where = [], params = [];
   let order = '', limit = '';
+  where.push(...filters(table, q, params));
   for (const [k, v] of q) {
-    if (k === 'select') continue;
+    if (k === 'select' || !['order', 'limit'].includes(k)) continue;
     if (k === 'order') {
       order = 'order by ' + v.split(',').map((o) => { const [c, d] = o.split('.'); return `${ident(c)} ${d === 'desc' ? 'desc' : 'asc'}`; }).join(', ');
     } else if (k === 'limit') limit = `limit ${Number(v)}`;
-    else if (v.startsWith('eq.')) { params.push(v.slice(3)); where.push(`t.${ident(k)}::text = $${params.length}`); }
-    else if (v.startsWith('neq.')) { params.push(v.slice(4)); where.push(`t.${ident(k)}::text <> $${params.length}`); }
-    else if (v.startsWith('in.(')) {
-      const vals = v.slice(4, -1).split(',').map((x) => x.replace(/^"|"$/g, ''));
-      params.push(vals); where.push(`t.${ident(k)}::text = any($${params.length})`);
-    } else throw new Error('unsupported filter ' + k + '=' + v);
   }
   const sql = `select coalesce(json_agg(x), '[]') as j from (select ${projection(table, 't', q.get('select') ?? '*')} from public.${ident(table)} t ${where.length ? 'where ' + where.join(' and ') : ''} ${order} ${limit}) x`;
   const rows = await withRole(claims, (c) => c.query(sql, params).then((r) => r.rows[0].j));
@@ -216,6 +264,10 @@ http.createServer(async (req, res) => {
     const tp = p.match(/^\/rest\/v1\/([a-z_]+)$/);
     if (tp && req.method === 'GET') {
       const [st, out] = await tableGet(claims, tp[1], url.searchParams, (req.headers.accept ?? '').includes('vnd.pgrst.object'));
+      return send(res, st, out);
+    }
+    if (tp && ['POST', 'PATCH', 'DELETE'].includes(req.method)) {
+      const [st, out] = await tableWrite(claims, req.method, tp[1], url.searchParams, body, req.headers.prefer, (req.headers.accept ?? '').includes('vnd.pgrst.object'));
       return send(res, st, out);
     }
     // --- functions ---

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deriveFacts, lineupAfter } from '../../supabase/functions/_shared/game.ts';
-import { rpc } from '../lib/api';
+import { invoke, rpc } from '../lib/api';
 import { when } from '../lib/format';
 import { supabase } from '../lib/supabase';
 import { useStore, usePlayerName } from '../lib/store';
@@ -62,6 +62,8 @@ export function MatchDetail({ matchId, onClose, admin }: { matchId: string | nul
     if (kind === 'reject') await rpc('reject_match', { p_match: m.id, p_note: null });
     else await rpc('approve_match', { p_match: m.id, p_void_bets: kind === 'void', p_note: null });
     toast(kind === 'reject' ? 'Maç reddedildi' : 'Maç onaylandı');
+    // herkese sonuç bildirimi (hata olsa da onay geçerli)
+    if (kind !== 'reject') invoke('notify', { action: 'settled', match_id: m.id }).catch(() => {});
     await refreshStore('queue', 'history', 'leaderboard', 'me', 'myBets', 'current');
     onClose();
   };

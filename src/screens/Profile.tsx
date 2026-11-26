@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase';
 import type { Transaction } from '../lib/types';
 import { Button, Card, Coin, Section, cn, confirm } from '../ui/kit';
 import { AdminScreen } from './Admin';
+import { NotificationsCard } from '../ui/notifications';
+import { unregisterThisDevice } from '../lib/push';
 
 const KIND: Record<Transaction['kind'], string> = {
   signup: 'Hoş geldin bonusu',
@@ -74,6 +76,8 @@ export function ProfileScreen() {
         </button>
       )}
 
+      <NotificationsCard />
+
       <Section title="Hesap hareketleri">
         <Card className="divide-y divide-line/50 py-0">
           {tx.length === 0 && <p className="py-4 text-center text-sm text-dim">Henüz hareket yok.</p>}
@@ -95,7 +99,10 @@ export function ProfileScreen() {
       <Button
         className="w-full"
         onClick={async () => {
-          if (await confirm('Çıkış yapılsın mı?', undefined, 'Çıkış yap')) await supabase.auth.signOut();
+          if (await confirm('Çıkış yapılsın mı?', undefined, 'Çıkış yap')) {
+            await unregisterThisDevice();
+            await supabase.auth.signOut();
+          }
         }}
       >
         <LogOut size={18} /> Çıkış yap

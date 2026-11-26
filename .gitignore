@@ -10,3 +10,4 @@ android/local.properties
 android/app/src/main/assets/public
 android/capacitor-cordova-android-plugins
 android/.idea
+android/app/google-services.json

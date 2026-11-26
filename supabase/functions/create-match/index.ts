@@ -4,6 +4,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { cors, HttpError, isUuid, json } from '../_shared/http.ts';
 import { fitForLineup, roleImpact, type MatchRecord } from '../_shared/model.ts';
+import { notifyOpen } from '../_shared/notify.ts';
 import { priceMatch } from '../_shared/pricing.ts';
 import type { Lineup } from '../_shared/types.ts';
 
@@ -59,7 +60,12 @@ Deno.serve(async (req) => {
       p_model: snapshot,
     });
     if (ce) throw new HttpError(400, ce.message);
-    return json({ match_id: matchId });
+    // Bildirim hatası maçın açılmasını engellemesin
+    const notified = await notifyOpen(svc, matchId as string).catch((e) => {
+      console.error('bildirim', e);
+      return null;
+    });
+    return json({ match_id: matchId, notified });
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
     console.error(e);

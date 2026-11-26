@@ -13,7 +13,8 @@ import { Coin, ConfirmHost, Spinner, Toasts, cn } from './ui/kit';
 import { coin } from './lib/format';
 import { checkUpdate, dismissUpdate, type UpdateInfo } from './lib/update';
 
-type Tab = 'match' | 'coupons' | 'stats' | 'ranks' | 'profile';
+import { type Tab, useNav } from './lib/nav';
+import { initPush } from './lib/push';
 
 export default function App() {
   const { booted, uid, me, start } = useStore();
@@ -62,7 +63,14 @@ function Splash() {
 }
 
 function Shell() {
-  const [tab, setTab] = useState<Tab>('match');
+  const tab = useNav((s) => s.tab);
+  const setTab = useNav((s) => s.go);
+  useEffect(() => {
+    initPush();
+  }, []);
+  useEffect(() => {
+    document.getElementById('main')?.scrollTo({ top: 0 });
+  }, [tab]);
   const me = useStore((s) => s.me)!;
   const current = useStore((s) => s.current);
   const online = useStore((s) => s.online);

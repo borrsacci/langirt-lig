@@ -73,6 +73,13 @@ Sonraki yayında adres `https://langirt-lig.pages.dev` olur. iPhone'da bu adres 
 2. Diğerleri kayıt olur. **Profil → Admin paneli → Kullanıcılar** bölümünden onaylarsınız; onaylanan hesaba 1000 coin yüklenir.
 3. Uygulaması olmayan oyuncuları **Admin paneli → Oyuncular** bölümünden ekleyebilirsiniz. Bu kişiler sonradan hesap açarsa, onaylarken mevcut oyuncu profiline bağlarsınız ve istatistikleri korunur.
 
+### Bildirimler
+
+Bahisler açılınca maçta oynamayan herkese bildirim gider. Maç onaylanınca herkese skor, kupon yapanlara kupon sonucu, oynayanlara maç ödülü bildirilir. Herkes **Profil → Bildirimler** bölümünden bildirimleri açar.
+
+- **iPhone**: Ek kurulum gerekmez. Uygulama Safari'de ana ekrana eklenmiş olmalı (iOS 16.4+).
+- **Android**: Firebase gerekir. [Firebase](https://console.firebase.google.com)'de proje açılır ve `com.langirt.lig` paket adıyla Android uygulaması eklenir. Sonra iki GitHub secret eklenir: `google-services.json` dosyasının içeriği `GOOGLE_SERVICES_JSON` olarak, **Project settings → Service accounts → Generate new private key** dosyasının içeriği `FIREBASE_SERVICE_ACCOUNT` olarak.
+
 ## Bilinmesi gerekenler
 
 - **Ücretsiz plan**: Supabase ücretsiz projesi 7 gün hiç kullanılmazsa uykuya geçer. Uyanması için Supabase panelinden **Restore** demek yeterlidir; veriler kaybolmaz.

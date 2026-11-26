@@ -12,6 +12,7 @@ import { pairCounts } from '../lib/stats';
 import { useStore, usePlayerName } from '../lib/store';
 import type { MatchEvent, MatchRow, Selection } from '../lib/types';
 import { Button, Card, Coin, Empty, Section, Sheet, TeamDot, cn, confirm, inputCls, toast } from '../ui/kit';
+import { PushPrompt } from '../ui/notifications';
 import { BetRow, EventFeed, ProbBar, Scoreboard, TeamLine, roleName, teamName, useRemaining } from '../ui/match';
 
 export function MatchScreen() {
@@ -150,6 +151,7 @@ function Setup() {
         </motion.div>
       )}
 
+      <PushPrompt />
       <RecentStrip />
     </div>
   );
