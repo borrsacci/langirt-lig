@@ -176,7 +176,7 @@ function GrantAll() {
 function PendingUser({ p, free, onDone }: { p: Profile; free: Player[]; onDone: () => void }) {
   const match = free.find((x) => x.name.toLocaleLowerCase('tr') === p.display_name.toLocaleLowerCase('tr'));
   const [player, setPlayer] = useState<string>(match?.id ?? 'new');
-  const [vis, setVis] = useState<Visibility>('full');
+  const [acc, setAcc] = useState({ live: true, history: true, notify: true });
   const nameTaken = player === 'new' && !match && useStore.getState().players.some((x) => x.name.toLocaleLowerCase('tr') === p.display_name.toLocaleLowerCase('tr'));
   return (
     <Card className="space-y-3">
@@ -192,9 +192,10 @@ function PendingUser({ p, free, onDone }: { p: Profile; free: Player[]; onDone: 
           ))}
         </select>
       </Field>
-      <Field label="Neleri görsün" hint={VIS_HINT[vis]}>
-        <Segmented value={vis} onChange={setVis} items={VIS_ITEMS} />
-      </Field>
+      <div className="space-y-1.5">
+        <span className="text-sm font-medium text-chrome">Erişim</span>
+        <AccessChecks {...acc} set={setAcc} />
+      </div>
       <div className="grid grid-cols-[1fr_1.6fr] gap-2">
         <Button
           variant="danger"
@@ -211,7 +212,8 @@ function PendingUser({ p, free, onDone }: { p: Profile; free: Player[]; onDone: 
           disabled={nameTaken}
           onClick={async () => {
             await rpc('admin_approve_user', { p_user: p.id, p_player: player === 'new' ? null : player });
-            if (vis !== 'full') await rpc('admin_set_access', { p_user: p.id, p_visibility: vis, p_notify: false });
+            const vis = toVis(acc.live, acc.history);
+            if (vis !== 'full' || !acc.notify) await rpc('admin_set_access', { p_user: p.id, p_visibility: vis, p_notify: acc.live && acc.notify });
             toast(`${p.display_name} onaylandı, 1000 coin yüklendi`);
             onDone();
           }}
@@ -394,16 +396,49 @@ interface Access {
   visibility: Visibility;
   notify: boolean;
 }
-const VIS_ITEMS: [Visibility, string][] = [
-  ['full', 'Her şeyi'],
-  ['no_live', 'Canlı hariç'],
-  ['none', 'Hiçbir maçı'],
-];
-const VIS_HINT: Record<Visibility, string> = {
-  full: 'Açık bahisleri, oynanan maçları, sonuçları ve istatistikleri görür.',
-  no_live: 'Açık bahisleri, oynanan ve onay bekleyen maçları görmez; sadece onaylanmış sonuçları ve istatistikleri görür. Bildirim almaz.',
-  none: 'Hiçbir maçı, istatistiği, kuponu ve sıralamayı görmez; uygulamada sadece kendi hesabını görür. Bildirim almaz.',
-};
+/** Tik kutuları ↔ görünürlük seviyesi */
+function toVis(live: boolean, history: boolean): Visibility {
+  return history ? (live ? 'full' : 'no_live') : 'none';
+}
+
+function Check({ label, hint, checked, disabled, onChange }: { label: string; hint?: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className={cn('flex items-center gap-3 rounded-xl bg-pitch px-4 py-3', disabled && 'opacity-45')}>
+      <div className="min-w-0 flex-1">
+        <div className="text-[15px]">{label}</div>
+        {hint && <div className="text-xs text-dim">{hint}</div>}
+      </div>
+      <input type="checkbox" className="size-5 shrink-0 accent-[#f2c14e]" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  );
+}
+
+/** Erişim tik kutuları (onay kartında ve kullanıcı penceresinde aynı) */
+function AccessChecks({ live, history, notify, set }: { live: boolean; history: boolean; notify: boolean; set: (v: { live: boolean; history: boolean; notify: boolean }) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <Check
+        label="Canlı maçları görsün"
+        hint="Açık bahisler, oynanan ve onay bekleyen maçlar"
+        checked={live}
+        onChange={(v) => set({ live: v, history: v ? true : history, notify: v ? notify : false })}
+      />
+      <Check
+        label="Geçmiş maçları ve istatistikleri görsün"
+        hint="Onaylanmış sonuçlar, istatistikler, kuponlar, sıralama"
+        checked={history}
+        onChange={(v) => set({ live: v ? live : false, history: v, notify: v && live ? notify : false })}
+      />
+      <Check
+        label="Bildirim gönder"
+        hint={live ? 'Bahisler açılınca ve maç sonuçlanınca' : 'Canlı maçları görmeyen kişiye bildirim gitmez'}
+        checked={live && notify}
+        disabled={!live}
+        onChange={(v) => set({ live, history, notify: v })}
+      />
+    </div>
+  );
+}
 
 function useAccess(): [Record<string, Access>, () => void] {
   const [a, setA] = useState<Record<string, Access>>({});
@@ -428,30 +463,24 @@ function AccessBadges({ a }: { a?: Access }) {
 }
 
 function AccessEditor({ userId, access, onSaved }: { userId: string; access?: Access; onSaved: () => void }) {
-  const [vis, setVis] = useState<Visibility>(access?.visibility ?? 'full');
-  const [notify, setNotify] = useState<boolean>(access?.notify ?? true);
-  useEffect(() => {
-    setVis(access?.visibility ?? 'full');
-    setNotify(access?.notify ?? true);
-  }, [access?.visibility, access?.notify, userId]);
-  const changed = vis !== (access?.visibility ?? 'full') || notify !== (access?.notify ?? true);
+  const init = () => {
+    const v = access?.visibility ?? 'full';
+    return { live: v === 'full', history: v !== 'none', notify: v === 'full' && (access?.notify ?? true) };
+  };
+  const [st, setSt] = useState(init);
+  useEffect(() => setSt(init()), [access?.visibility, access?.notify, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const orig = init();
+  const changed = st.live !== orig.live || st.history !== orig.history || st.notify !== orig.notify;
   return (
     <Section title="Erişim">
       <p className="text-xs text-dim">Bu ayarları sadece siz görürsünüz; kişiye hiçbir şey söylenmez.</p>
-      <Segmented value={vis} onChange={setVis} items={VIS_ITEMS} />
-      <p className="px-1 text-sm text-chrome">{VIS_HINT[vis]}</p>
-      {vis === 'full' && (
-        <label className="flex items-center justify-between rounded-xl bg-pitch px-4 py-3">
-          <span className="text-[15px]">Bildirim gönder</span>
-          <input type="checkbox" className="size-5 accent-[#f2c14e]" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-        </label>
-      )}
+      <AccessChecks {...st} set={setSt} />
       <Button
         className="w-full"
         variant="primary"
         disabled={!changed}
         onClick={async () => {
-          await rpc('admin_set_access', { p_user: userId, p_visibility: vis, p_notify: vis === 'full' ? notify : false });
+          await rpc('admin_set_access', { p_user: userId, p_visibility: toVis(st.live, st.history), p_notify: st.live && st.notify });
           onSaved();
           toast('Erişim kaydedildi');
         }}

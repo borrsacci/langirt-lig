@@ -49,7 +49,10 @@ try {
   await a.getByText('Admin paneli').click();
   await a.getByRole('button', { name: /Kullanıcılar/ }).click();
   await a.getByRole('button', { name: /Patron/ }).click();
-  await a.getByRole('button', { name: 'Hiçbir maçı' }).click();
+  await a.getByLabel(/Geçmiş maçları ve istatistikleri görsün/).uncheck();
+  // geçmişi kapatınca canlı ve bildirim de kendiliğinden kapanır
+  if (await a.getByLabel(/Canlı maçları görsün/).isChecked()) errors.push('canlı tiki kapanmadı');
+  if (await a.getByLabel(/Bildirim gönder/).isChecked()) errors.push('bildirim tiki kapanmadı');
   await a.screenshot({ path: '/tmp/shots/v-admin-erisim.png' });
   await a.getByRole('button', { name: 'Erişimi kaydet' }).click();
   await a.getByText('Erişim kaydedildi').waitFor();
