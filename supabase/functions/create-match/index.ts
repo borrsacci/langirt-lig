@@ -21,13 +21,20 @@ Deno.serve(async (req) => {
     const { data: u, error: ue } = await userClient.auth.getUser(authHeader.replace(/^Bearer\s+/i, ''));
     if (ue || !u.user) throw new HttpError(401, 'Oturum geçersiz, tekrar giriş yapın');
 
+    const svc = createClient(URL, SERVICE, { auth: { persistSession: false } });
+    // Görünürlüğü kısıtlı kullanıcılar (admin ayarı) maç açamaz
+    const [{ data: prof }, { data: acc }] = await Promise.all([
+      svc.from('profiles').select('is_admin').eq('id', u.user.id).maybeSingle(),
+      svc.from('profile_settings').select('visibility').eq('user_id', u.user.id).maybeSingle(),
+    ]);
+    if (!prof?.is_admin && acc && acc.visibility !== 'full') throw new HttpError(403, 'Maç açma yetkiniz yok');
+
     const body = await req.json().catch(() => ({}));
     const l = body?.lineup as Lineup | undefined;
     if (!l || ![l.AF, l.AK, l.BF, l.BK].every(isUuid) || new Set([l.AF, l.AK, l.BF, l.BK]).size !== 4) {
       throw new HttpError(400, 'Geçersiz kadro');
     }
 
-    const svc = createClient(URL, SERVICE, { auth: { persistSession: false } });
     const [{ data: players, error: pe }, { data: history, error: he }] = await Promise.all([
       svc.from('players').select('id,name'),
       svc.rpc('approved_history'),

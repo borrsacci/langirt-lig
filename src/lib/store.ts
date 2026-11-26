@@ -4,7 +4,7 @@ import { rpc } from './api';
 import { supabase } from './supabase';
 import type { Bet, HistoryMatch, LeaderRow, Market, MatchEvent, MatchRow, Player, Profile, Selection } from './types';
 
-type Part = 'me' | 'profiles' | 'players' | 'current' | 'events' | 'markets' | 'matchBets' | 'myBets' | 'allBets' | 'queue' | 'history' | 'leaderboard';
+type Part = 'access' | 'me' | 'profiles' | 'players' | 'current' | 'events' | 'markets' | 'matchBets' | 'myBets' | 'allBets' | 'queue' | 'history' | 'leaderboard';
 
 interface State {
   booted: boolean;
@@ -22,6 +22,8 @@ interface State {
   queue: MatchRow[];
   history: HistoryMatch[];
   leaderboard: LeaderRow[];
+  /** kura çekip maç açabilir mi (admin ayarına göre) */
+  canCreate: boolean;
   /** sunucu saati − cihaz saati (ms) */
   offset: number;
   online: boolean;
@@ -60,6 +62,10 @@ export const useStore = create<State>((set, get) => {
   };
 
   const loaders: Record<Part, () => Promise<void>> = {
+    access: async () => {
+      const a = await rpc<{ can_create_match: boolean }>('my_access').catch(() => null);
+      set({ canCreate: !!a?.can_create_match });
+    },
     me: async () => {
       const uid = get().uid;
       if (!uid) return set({ me: null });
@@ -155,6 +161,7 @@ export const useStore = create<State>((set, get) => {
     history: [],
     leaderboard: [],
     offset: 0,
+    canCreate: false,
     online: true,
 
     async start(uid) {
@@ -174,7 +181,7 @@ export const useStore = create<State>((set, get) => {
       if (gen !== generation) return;
       const me = get().me;
       if (me?.status === 'active') {
-        await Promise.all([get().refresh('profiles', 'players', 'current', 'myBets', 'allBets', 'queue', 'history', 'leaderboard'), get().syncClock()]);
+        await Promise.all([get().refresh('access', 'profiles', 'players', 'current', 'myBets', 'allBets', 'queue', 'history', 'leaderboard'), get().syncClock()]);
         if (gen !== generation) return;
         channel = supabase
           .channel(`db-${gen}-${Date.now()}`)
@@ -191,7 +198,7 @@ export const useStore = create<State>((set, get) => {
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'match_events' }, () => schedule('events'))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'bets' }, () => schedule('matchBets', 'myBets', 'allBets', 'leaderboard'))
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => schedule('me', 'profiles', 'leaderboard'))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => schedule('me', 'access', 'profiles', 'leaderboard'))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => schedule('players'))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'selections' }, () => schedule('markets', 'myBets'))
           .subscribe((status) => {

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { errText } from '../lib/api';
 import { enablePush, type PushState, pushState, sendTestPush } from '../lib/push';
 import { isNative } from '../lib/native';
+import { useStore } from '../lib/store';
 import { Button, Card, cn, toast } from './kit';
 
 const TEXT: Record<PushState, string> = {
@@ -36,6 +37,8 @@ async function turnOn(set: (s: PushState) => void) {
 
 export function NotificationsCard() {
   const [st, setSt] = usePushState();
+  const canCreate = useStore((s) => s.canCreate);
+  if (!canCreate) return null; // kısıtlı hesaplara bildirim gitmez
   if (!st || (st === 'unsupported' && !isNative)) return null; // web/iPhone sürümünde bildirim yok
   return (
     <Card className="space-y-3">
@@ -66,6 +69,7 @@ const DISMISS = 'langirt-push-prompt-dismissed';
 /** Maç ekranında bir kez: bildirimler kapalıysa açmayı önerir */
 export function PushPrompt() {
   const [st, setSt] = usePushState();
+  const canCreate = useStore((s) => s.canCreate);
   const [hidden, setHidden] = useState(() => {
     try {
       return localStorage.getItem(DISMISS) === '1';
@@ -73,7 +77,7 @@ export function PushPrompt() {
       return false;
     }
   });
-  if (hidden || (st !== 'off' && st !== 'ios-install')) return null;
+  if (!canCreate || hidden || (st !== 'off' && st !== 'ios-install')) return null;
   return (
     <Card className={cn('space-y-3 border border-brass/30 bg-brass/10')}>
       <div className="flex items-center gap-2 font-semibold text-brass">

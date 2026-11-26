@@ -378,9 +378,60 @@ d('veritabanı kuralları', () => {
     await as(A, 'select cancel_match($1)', [M6]);
   });
 
+  it('görünürlük: kısıtlı kullanıcılar maçları göremez, ayarı sadece admin görür', async () => {
+    const W = await signup('patron', 'Patron'); // maçlardan haberi olmasın
+    const L = await signup('yari', 'Yarı'); // sadece onaylı sonuçları görsün
+    for (const u of [W, L]) await as(A, 'select admin_approve_user($1, null)', [u]);
+    await as(A, 'select admin_set_access($1, $2, $3)', [W, 'none', false]);
+    await as(A, 'select admin_set_access($1, $2, $3)', [L, 'no_live', true]);
+    await expectErr(as(U2, 'select admin_set_access($1, $2, $3)', [W, 'full', true]), /sadece admin/);
+    await expectErr(as(U2, 'select * from admin_list_access()'), /sadece admin/);
+    await expectErr(as(A, 'select admin_set_access($1, $2, $3)', [A, 'none', true]), /Admin hesabı/);
+    // kullanıcı kendi ayarını göremez, yardımcı fonksiyonlara API'den erişemez
+    await expectErr(as(W, 'select * from profile_settings'), /permission denied/);
+    expect((await as(W, 'select my_access() a'))[0].a).toEqual({ can_create_match: false });
+    expect((await as(U2, 'select my_access() a'))[0].a).toEqual({ can_create_match: true });
+    const acc = await as(A, 'select * from admin_list_access()');
+    expect(acc.find((r: any) => r.user_id === W)).toMatchObject({ visibility: 'none', notify: false });
+
+    // açık bir maç + onaylanmış eski maçlar var
+    const M7 = await createMatch(A, { AF: P['Okan'], AK: P['Caner'], BF: P['Burak'], BK: P['Tolga'] });
+    const ms1 = await sel(M7, 'ms', '1');
+    for (const u of [W, L]) {
+      expect(await as(u, 'select id from matches where status in ($1, $2)', ['open', 'live'])).toHaveLength(0);
+      expect(await as(u, 'select id from markets where match_id = $1', [M7])).toHaveLength(0);
+      expect(await as(u, 'select id from selections where match_id = $1', [M7])).toHaveLength(0);
+      await expectErr(as(u, 'select place_bet($1, 5)', [ms1.id]), /bulunamadı/);
+      await expectErr(as(u, 'select tick($1)', [M7]), /bulunamadı/);
+    }
+    // no_live: onaylanmış sonuçları ve sıralamayı görür; none: hiçbir şey
+    expect((await as(L, 'select approved_history() h'))[0].h.length).toBeGreaterThan(0);
+    expect((await as(L, 'select count(*)::int c from match_events'))[0].c).toBeGreaterThan(0);
+    expect((await as(L, 'select * from get_leaderboard()')).length).toBeGreaterThan(1);
+    expect((await as(W, 'select approved_history() h'))[0].h).toEqual([]);
+    expect((await as(W, 'select count(*)::int c from matches'))[0].c).toBe(0);
+    expect((await as(W, 'select count(*)::int c from match_events'))[0].c).toBe(0);
+    expect((await as(W, 'select count(*)::int c from bets'))[0].c).toBe(0);
+    expect((await as(W, 'select id from profiles')).map((r: any) => r.id)).toEqual([W]);
+    expect((await as(W, 'select user_id from get_leaderboard()')).map((r: any) => r.user_id)).toEqual([W]);
+    // kısıtlama kalkınca her şey görünür
+    await as(A, 'select admin_set_access($1, $2, $3)', [L, 'full', true]);
+    expect(await as(L, 'select id from matches where id = $1', [M7])).toHaveLength(1);
+    // kısıtlı kullanıcı maçta oynuyorsa o maçı görür
+    const wp = (await as(A, `select admin_add_player('Misafir') id`))[0].id;
+    await as(A, 'select admin_link_player($1, $2)', [W, wp]);
+    await as(A, 'select cancel_match($1)', [M7]);
+    const M8 = await createMatch(A, { AF: wp, AK: P['Caner'], BF: P['Burak'], BK: P['Tolga'] });
+    expect(await as(W, 'select id from matches where id = $1', [M8])).toHaveLength(1);
+    await as(A, 'select cancel_match($1)', [M8]);
+    // yardımcı fonksiyonlar public şemada değil (API'den çağrılamaz)
+    const pub = await admin.query(`select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and proname in ('my_visibility','can_see_match','can_see_match_id')`);
+    expect(pub.rows).toHaveLength(0);
+  });
+
   it('sıralama tablosu', async () => {
     const lb = await as(U2, 'select * from get_leaderboard()');
-    expect(lb.length).toBe(5);
+    expect(lb.length).toBe(7);
     const s = lb.find((x: any) => x.user_id === U5);
     expect(Number(s.profit)).toBeCloseTo(Number(s.returned) - Number(s.staked), 2);
     expect(lb.map((x: any) => Number(x.balance))).toEqual([...lb.map((x: any) => Number(x.balance))].sort((a, b) => b - a));

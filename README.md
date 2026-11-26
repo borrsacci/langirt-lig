@@ -79,6 +79,16 @@ Bildirimler **sadece Android uygulamasına** gider; iPhone/web sürümüne gitme
 
 Kurulum için [Firebase](https://console.firebase.google.com)'de proje açılır ve `com.langirt.lig` paket adıyla Android uygulaması eklenir. Sonra iki GitHub secret eklenir: `google-services.json` dosyasının içeriği `GOOGLE_SERVICES_JSON` olarak, **Project settings → Service accounts → Generate new private key** dosyasının içeriği `FIREBASE_SERVICE_ACCOUNT` olarak.
 
+### Kim neyi görür (sadece admin)
+
+**Admin paneli → Kullanıcılar → kişi → Erişim** bölümünden her kullanıcı için ayar yapılır:
+
+- **Her şeyi:** Her şeyi görür. Bildirim açık veya kapalı seçilebilir.
+- **Canlı hariç:** Açık bahisleri, oynanan ve onay bekleyen maçları görmez. Sadece onaylanmış sonuçları ve istatistikleri görür, bildirim almaz.
+- **Hiçbir maçı:** Hiçbir maçı, istatistiği, kuponu ve sıralamayı görmez. Uygulamada sadece kendi hesabını görür, bildirim almaz.
+
+Kural sunucuda uygulanır; uygulama kurcalansa da veri görünmez. Kişi kendi ayarını göremez. Kısıtlı biri bir maçta oynarsa o maçı görür. Yeni hesap onaylanırken de seviye seçilebilir.
+
 ## Bilinmesi gerekenler
 
 - **Ücretsiz plan**: Supabase ücretsiz projesi 7 gün hiç kullanılmazsa uykuya geçer. Uyanması için Supabase panelinden **Restore** demek yeterlidir; veriler kaybolmaz.

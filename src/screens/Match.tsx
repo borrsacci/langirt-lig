@@ -65,6 +65,15 @@ function Setup() {
   };
 
   const waiting = queue.length;
+  const canCreate = useStore((s) => s.canCreate);
+  const hasHistory = history.length > 0;
+
+  if (!canCreate)
+    return (
+      <div className="space-y-6 pt-2">
+        {hasHistory ? <RecentStrip /> : <Empty title="Henüz maç yok">Maçlar burada görünecek.</Empty>}
+      </div>
+    );
 
   return (
     <div className="space-y-6 pt-2">

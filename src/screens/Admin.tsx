@@ -98,6 +98,7 @@ function Users() {
   const pending = profiles.filter((p) => p.status === 'pending');
   const others = profiles.filter((p) => p.status !== 'pending');
   const playerName = (id: string | null) => players.find((p) => p.id === id)?.name;
+  const [access, reloadAccess] = useAccess();
 
   return (
     <div className="space-y-5">
@@ -105,7 +106,15 @@ function Users() {
       {pending.length > 0 && (
         <Section title="Onay bekleyenler">
           {pending.map((p) => (
-            <PendingUser key={p.id} p={p} free={players.filter((x) => !linked.has(x.id))} onDone={() => refresh('profiles', 'players', 'leaderboard')} />
+            <PendingUser
+              key={p.id}
+              p={p}
+              free={players.filter((x) => !linked.has(x.id))}
+              onDone={() => {
+                refresh('profiles', 'players', 'leaderboard');
+                reloadAccess();
+              }}
+            />
           ))}
         </Section>
       )}
@@ -119,13 +128,14 @@ function Users() {
                   {p.status === 'disabled' && <span className="text-xs text-loss"> kapalı</span>}
                 </div>
                 <div className="truncate text-xs text-dim">@{p.username} · {playerName(p.player_id) ?? 'oyuncu bağlı değil'}</div>
+                <AccessBadges a={access[p.id]} />
               </div>
               <Coin value={coin(p.balance)} className="text-brass" />
             </button>
           ))}
         </div>
       </Section>
-      <UserSheet p={sel} onClose={() => setSel(null)} free={players.filter((x) => !linked.has(x.id))} />
+      <UserSheet p={sel} onClose={() => setSel(null)} free={players.filter((x) => !linked.has(x.id))} access={sel ? access[sel.id] : undefined} onAccess={reloadAccess} />
     </div>
   );
 }
@@ -166,6 +176,7 @@ function GrantAll() {
 function PendingUser({ p, free, onDone }: { p: Profile; free: Player[]; onDone: () => void }) {
   const match = free.find((x) => x.name.toLocaleLowerCase('tr') === p.display_name.toLocaleLowerCase('tr'));
   const [player, setPlayer] = useState<string>(match?.id ?? 'new');
+  const [vis, setVis] = useState<Visibility>('full');
   const nameTaken = player === 'new' && !match && useStore.getState().players.some((x) => x.name.toLocaleLowerCase('tr') === p.display_name.toLocaleLowerCase('tr'));
   return (
     <Card className="space-y-3">
@@ -180,6 +191,9 @@ function PendingUser({ p, free, onDone }: { p: Profile; free: Player[]; onDone: 
             <option key={x.id} value={x.id}>{x.name}{x.active ? '' : ' (pasif)'}</option>
           ))}
         </select>
+      </Field>
+      <Field label="Neleri görsün" hint={VIS_HINT[vis]}>
+        <Segmented value={vis} onChange={setVis} items={VIS_ITEMS} />
       </Field>
       <div className="grid grid-cols-[1fr_1.6fr] gap-2">
         <Button
@@ -197,6 +211,7 @@ function PendingUser({ p, free, onDone }: { p: Profile; free: Player[]; onDone: 
           disabled={nameTaken}
           onClick={async () => {
             await rpc('admin_approve_user', { p_user: p.id, p_player: player === 'new' ? null : player });
+            if (vis !== 'full') await rpc('admin_set_access', { p_user: p.id, p_visibility: vis, p_notify: false });
             toast(`${p.display_name} onaylandı, 1000 coin yüklendi`);
             onDone();
           }}
@@ -208,7 +223,7 @@ function PendingUser({ p, free, onDone }: { p: Profile; free: Player[]; onDone: 
   );
 }
 
-function UserSheet({ p, onClose, free }: { p: Profile | null; onClose: () => void; free: Player[] }) {
+function UserSheet({ p, onClose, free, access, onAccess }: { p: Profile | null; onClose: () => void; free: Player[]; access?: Access; onAccess: () => void }) {
   const refresh = useStore((s) => s.refresh);
   const me = useStore((s) => s.me)!;
   const players = useStore((s) => s.players);
@@ -230,6 +245,7 @@ function UserSheet({ p, onClose, free }: { p: Profile | null; onClose: () => voi
             <span>@{p.username}</span>
             <Coin value={coin(p.balance)} className="text-brass" />
           </div>
+          {!p.is_admin && <AccessEditor userId={p.id} access={access} onSaved={onAccess} />}
           <Section title="Coin ekle veya düş">
             <div className="grid grid-cols-[1fr_1.4fr] gap-2">
               <input className={inputCls} inputMode="decimal" placeholder="ör. 500 veya -100" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,-]/g, ''))} />
@@ -371,3 +387,77 @@ function Players() {
   );
 }
 
+
+// ---------------------------------------------------------------- Erişim (sadece admin görür)
+type Visibility = 'full' | 'no_live' | 'none';
+interface Access {
+  visibility: Visibility;
+  notify: boolean;
+}
+const VIS_ITEMS: [Visibility, string][] = [
+  ['full', 'Her şeyi'],
+  ['no_live', 'Canlı hariç'],
+  ['none', 'Hiçbir maçı'],
+];
+const VIS_HINT: Record<Visibility, string> = {
+  full: 'Açık bahisleri, oynanan maçları, sonuçları ve istatistikleri görür.',
+  no_live: 'Açık bahisleri, oynanan ve onay bekleyen maçları görmez; sadece onaylanmış sonuçları ve istatistikleri görür. Bildirim almaz.',
+  none: 'Hiçbir maçı, istatistiği, kuponu ve sıralamayı görmez; uygulamada sadece kendi hesabını görür. Bildirim almaz.',
+};
+
+function useAccess(): [Record<string, Access>, () => void] {
+  const [a, setA] = useState<Record<string, Access>>({});
+  const load = () => {
+    rpc<{ user_id: string; visibility: Visibility; notify: boolean }[]>('admin_list_access')
+      .then((rows) => setA(Object.fromEntries(rows.map((r) => [r.user_id, { visibility: r.visibility, notify: r.notify }]))))
+      .catch(() => {});
+  };
+  useEffect(load, []);
+  return [a, load];
+}
+
+function AccessBadges({ a }: { a?: Access }) {
+  if (!a || (a.visibility === 'full' && a.notify)) return null;
+  return (
+    <div className="mt-1 flex gap-1.5">
+      {a.visibility === 'none' && <span className="rounded bg-loss/15 px-1.5 py-0.5 text-[11px] font-semibold text-loss">Maçları görmez</span>}
+      {a.visibility === 'no_live' && <span className="rounded bg-brass/15 px-1.5 py-0.5 text-[11px] font-semibold text-brass">Canlıyı görmez</span>}
+      {a.visibility === 'full' && !a.notify && <span className="rounded bg-felt-2 px-1.5 py-0.5 text-[11px] font-semibold text-chrome">Bildirim kapalı</span>}
+    </div>
+  );
+}
+
+function AccessEditor({ userId, access, onSaved }: { userId: string; access?: Access; onSaved: () => void }) {
+  const [vis, setVis] = useState<Visibility>(access?.visibility ?? 'full');
+  const [notify, setNotify] = useState<boolean>(access?.notify ?? true);
+  useEffect(() => {
+    setVis(access?.visibility ?? 'full');
+    setNotify(access?.notify ?? true);
+  }, [access?.visibility, access?.notify, userId]);
+  const changed = vis !== (access?.visibility ?? 'full') || notify !== (access?.notify ?? true);
+  return (
+    <Section title="Erişim">
+      <p className="text-xs text-dim">Bu ayarları sadece siz görürsünüz; kişiye hiçbir şey söylenmez.</p>
+      <Segmented value={vis} onChange={setVis} items={VIS_ITEMS} />
+      <p className="px-1 text-sm text-chrome">{VIS_HINT[vis]}</p>
+      {vis === 'full' && (
+        <label className="flex items-center justify-between rounded-xl bg-pitch px-4 py-3">
+          <span className="text-[15px]">Bildirim gönder</span>
+          <input type="checkbox" className="size-5 accent-[#f2c14e]" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+        </label>
+      )}
+      <Button
+        className="w-full"
+        variant="primary"
+        disabled={!changed}
+        onClick={async () => {
+          await rpc('admin_set_access', { p_user: userId, p_visibility: vis, p_notify: vis === 'full' ? notify : false });
+          onSaved();
+          toast('Erişim kaydedildi');
+        }}
+      >
+        Erişimi kaydet
+      </Button>
+    </Section>
+  );
+}

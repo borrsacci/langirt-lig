@@ -55,6 +55,24 @@ export async function sendToUsers(svc: SupabaseClient, msgFor: Map<string, PushM
   return { sent, failed };
 }
 
+/**
+ * Bildirim alabilecek kullanıcılar: aktif, admin ayarında bildirimi kapalı olmayan ve
+ * "her şeyi görür" seviyesindekiler. alsoPlayers: kısıtlı olsa da bu maçta oynayanlar da alır.
+ */
+async function recipients(svc: SupabaseClient, alsoPlayers: string[] = []): Promise<{ id: string; player_id: string | null }[]> {
+  const [{ data: users }, { data: settings }] = await Promise.all([
+    svc.from('profiles').select('id, player_id, is_admin').eq('status', 'active'),
+    svc.from('profile_settings').select('user_id, visibility, notify'),
+  ]);
+  const st = new Map((settings ?? []).map((s: any) => [s.user_id, s]));
+  return (users ?? []).filter((u: any) => {
+    const s: any = st.get(u.id);
+    if (s && s.notify === false) return false;
+    if (u.is_admin || !s || s.visibility === 'full') return true;
+    return !!u.player_id && alsoPlayers.includes(u.player_id);
+  });
+}
+
 const odds = (n: number | null | undefined) => (n == null ? '—' : Number(n).toFixed(2).replace('.', ','));
 const coins = (n: number) => (Math.round(n * 100) / 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
@@ -79,7 +97,7 @@ export async function notifyOpen(svc: SupabaseClient, matchId: string) {
   const { data: sels } = ms ? await svc.from('selections').select('code, odds').eq('market_id', ms.id) : { data: [] as { code: string; odds: number | null }[] };
   const o = (c: string) => odds(sels?.find((s: any) => s.code === c)?.odds);
   const lineup = [m.a_f, m.a_k, m.b_f, m.b_k];
-  const { data: users } = await svc.from('profiles').select('id, player_id').eq('status', 'active');
+  const users = await recipients(svc);
   const msg: PushMessage = {
     title: 'Bahisler açıldı',
     body: `${nm(m.a_f)} & ${nm(m.a_k)} – ${nm(m.b_f)} & ${nm(m.b_k)}\nMavi ${o('1')} · X ${o('X')} · Kırmızı ${o('2')}`,
@@ -102,11 +120,11 @@ export async function notifySettled(svc: SupabaseClient, matchId: string) {
     .maybeSingle();
   if (!m) return { sent: 0, failed: 0 };
   const nm = await names(svc);
-  const [{ data: events }, { data: bets }, { data: rewards }, { data: users }] = await Promise.all([
+  const users = await recipients(svc, [m.a_f, m.a_k, m.b_f, m.b_k]);
+  const [{ data: events }, { data: bets }, { data: rewards }] = await Promise.all([
     svc.from('match_events').select('*').eq('match_id', matchId),
     svc.from('bets').select('user_id, status, stake, payout').eq('match_id', matchId).neq('status', 'cancelled'),
     svc.from('transactions').select('user_id, amount').eq('match_id', matchId).eq('kind', 'reward'),
-    svc.from('profiles').select('id').eq('status', 'active'),
   ]);
   const f = deriveFacts(((events ?? []) as MatchEvent[]).map((e) => ({ ...e, seq: Number(e.seq) })));
   const A = `${nm(m.a_f)} & ${nm(m.a_k)}`, B = `${nm(m.b_f)} & ${nm(m.b_k)}`;
